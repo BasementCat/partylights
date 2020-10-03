@@ -1,0 +1,45 @@
+#! /usr/bin/env python3
+
+import argparse
+import sys
+import os
+
+
+def create_parser():
+    parser = argparse.ArgumentParser(description="It's time to party!")
+    parser.add_argument('-c', '--config-file', help="Path to main config file")
+    return parser
+
+
+def add_commands(parser):
+    subparsers = parser.add_subparsers(dest='command')
+
+    from app.lightserver import LightServerCommand
+
+    commands = {}
+
+    for cls in (LightServerCommand,):
+        i = cls()
+        commands[i.create_subparser(subparsers)] = i
+
+    return commands
+
+
+def main(commands, args):
+    from app.common.lib.config import load_config
+    config = load_config(args.config_file)
+    c = commands[args.command]
+    return c.main(config, args)
+
+
+if __name__ == '__main__':
+    sys.path.append(os.path.normpath(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))))
+    parser = create_parser()
+    commands = add_commands(parser)
+    res = main(commands, parser.parse_args())
+    try:
+        sys.exit(int(res))
+    except SystemExit:
+        raise
+    except (TypeError, ValueError):
+        sys.exit(0)

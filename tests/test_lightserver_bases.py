@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from lightserver import bases
+from app.lightserver import bases
 
 
 TEST_CONFIG = {

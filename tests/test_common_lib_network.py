@@ -1,7 +1,7 @@
 from unittest import TestCase
 import socket
 
-from common.lib import network
+from app.common.lib import network
 
 
 class TestServer(TestCase):
