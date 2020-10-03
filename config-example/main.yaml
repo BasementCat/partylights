@@ -1,0 +1,15 @@
+---
+DMXDevices:
+  # The key default is special, it's used by default (lol)
+  # Alternate names can be defined, then used by lights
+  # Value is a device path, USB ID, or "sink" (does nothing, for testing)
+  # Value can also be "vsink" for verbose logging
+  # default: /dev/ttyUSB0
+  # default: "0403:6001"
+  default: sink
+LightTypes: "@types.yaml"
+Lights: "@lights.yaml"
+LightServer:
+  Bind:
+    Host: '0.0.0.0'
+    Port: 37730
