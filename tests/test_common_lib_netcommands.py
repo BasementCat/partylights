@@ -142,6 +142,19 @@ class TestCommandParser(TestCase):
         self.assertEqual('foo', vd['name'])
         self.assertEqual(9, vd['value'])
 
+    def test_validators_autoset_err_args(self):
+        vd = {}
+        def validator(command, name, value):
+            if value >= 10:
+                raise nc.CommandError(message="Must be <10")
+            vd['command'] = command
+            vd['name'] = name
+            vd['value'] = value
+        p = nc.CommandParser('cmd', None, foo=[int, 1, [validator]])
+
+        with self.assertRaisesRegex(nc.CommandError, 'ERROR cmd foo 12 :Must be <10'):
+            p.from_parsed('cmd', '12')
+
     def test_validators_kv(self):
         with self.assertRaisesRegex(ValueError, 'Validator.*not callable'):
             nc.CommandParser('cmd', None, foo=['kv', int, 1, ['x']])

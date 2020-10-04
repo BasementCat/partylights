@@ -34,7 +34,7 @@ class LightServerCommand(Command):
         def validate_light(command, arg, value):
             if value != '*':
                 if value not in self.lights:
-                    raise nc.CommandError(command=command, arg=arg, value=value, message="Not a valid light")
+                    raise nc.CommandError(message="Not a valid light")
 
         command_set = nc.CommandSet(
             nc.CommandParser('lights', self.cmd_lights, light=[str, 0, [validate_light]]),
@@ -75,7 +75,7 @@ class LightServerCommand(Command):
 
         for cl in self.server.clients.values():
             if cl.exclusive and cl is not client:
-                raise nc.CommandError(command=command.command, message='Another client is exclusive')
+                raise nc.CommandError(message='Another client is exclusive')
 
         for light in lights:
             light.set_state(**command.state)
@@ -94,7 +94,7 @@ class LightServerCommand(Command):
                 # Can't go exclusive if any other clients are
                 for cl in self.server.clients.values():
                     if cl.exclusive and cl is not client:
-                        raise nc.CommandError(command=command.command, message='Another client is exclusive')
+                        raise nc.CommandError(message='Another client is exclusive')
             client.exclusive = state
 
         client.write(f"EXCLUSIVE {int(client.exclusive)}\n")

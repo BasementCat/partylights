@@ -118,53 +118,65 @@ class CommandParser:
             raise ValueError("Invalid command supplied")
         args = list(args)
         parsed = {}
-        for name, spec in self.arguments.items():
-            parsed[name] = {} if spec['is_kv'] else (None if spec['num'] in (0, 1) else [])
-            while True:
-                if not args:
-                    if spec['num'] == '*':
-                        break
-                    elif spec['num'] == '+':
-                        if not len(parsed[name]):
-                            raise CommandError(command=command, arg=name, message="Not enough arguments")
-                        break
-                    elif spec['num'] == 0:
-                        break
-                    elif spec['num'] == 1:
-                        if parsed[name] is None or (spec['is_kv'] and not parsed[name]):
-                            raise CommandError(command=command, arg=name, message="Missing arguments")
-                        break
-                    else:
-                        if len(parsed[name]) < spec['num']:
-                            raise CommandError(command=command, arg=name, message="Not enough arguments")
-                        break
-                else:
-                    key = None
-                    value = args.pop(0)
-                    if spec['is_kv']:
-                        if '=' not in value:
-                            raise CommandError(command=command, arg=name, value=value, message="Not a key/value pair")
-                        key, value = value.split('=', 1)
-                    try:
-                        value = spec['type'](value)
-                    except (TypeError, ValueError):
-                        raise CommandError(command=command, arg=name, value=value, message="Invalid data")
-                    for validator in spec['validators']:
-                        # Validators must raise CommandError
-                        validator(command, name, value)
-                    if spec['is_kv']:
-                        parsed[name][key] = value
-                    elif spec['num'] in ('*', '+') or spec['num'] > 1:
-                        parsed[name].append(value)
-                    else:
-                        parsed[name] = value
+        try:
+            for name, spec in self.arguments.items():
+                try:
+                    parsed[name] = {} if spec['is_kv'] else (None if spec['num'] in (0, 1) else [])
+                    while True:
+                        if not args:
+                            if spec['num'] == '*':
+                                break
+                            elif spec['num'] == '+':
+                                if not len(parsed[name]):
+                                    raise CommandError(message="Not enough arguments")
+                                break
+                            elif spec['num'] == 0:
+                                break
+                            elif spec['num'] == 1:
+                                if parsed[name] is None or (spec['is_kv'] and not parsed[name]):
+                                    raise CommandError(message="Missing arguments")
+                                break
+                            else:
+                                if len(parsed[name]) < spec['num']:
+                                    raise CommandError(message="Not enough arguments")
+                                break
+                        else:
+                            key = None
+                            value = args.pop(0)
+                            try:
+                                if spec['is_kv']:
+                                    if '=' not in value:
+                                        raise CommandError(message="Not a key/value pair")
+                                    key, value = value.split('=', 1)
+                                try:
+                                    value = spec['type'](value)
+                                except (TypeError, ValueError):
+                                    raise CommandError(message="Invalid data")
+                                for validator in spec['validators']:
+                                    # Validators must raise CommandError
+                                    validator(command, name, value)
+                                if spec['is_kv']:
+                                    parsed[name][key] = value
+                                elif spec['num'] in ('*', '+') or spec['num'] > 1:
+                                    parsed[name].append(value)
+                                else:
+                                    parsed[name] = value
+                            except CommandError as e:
+                                e.value = e.value or value
+                                raise
 
-                if spec['num'] not in ('*', '+'):
-                    if spec['num'] < 2:
-                        if parsed[name] is not None:
-                            break
-                    elif len(parsed[name]) == spec['num']:
-                        break
+                        if spec['num'] not in ('*', '+'):
+                            if spec['num'] < 2:
+                                if parsed[name] is not None:
+                                    break
+                            elif len(parsed[name]) == spec['num']:
+                                break
+                except CommandError as e:
+                    e.arg = e.arg or name
+                    raise
+        except CommandError as e:
+            e.command = e.command or command
+            raise
 
         return Command(command, **parsed)
 
@@ -203,7 +215,11 @@ class CommandSet:
                 break
             try:
                 command_instance, command = self.parse(data)
-                command_instance.callback(client, command)
+                try:
+                    command_instance.callback(client, command)
+                except CommandError as e:
+                    e.command = e.command or command.command
+                    raise
             except CommandError as e:
                 client.write(e)
             except:
