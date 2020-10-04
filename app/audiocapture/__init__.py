@@ -1,24 +1,17 @@
 import logging
 import signal
 import threading
-# import json
+import json
 
 from app.common.lib.command import Command
-# from app.common.lib.network import Server, ServerClient
-# import app.common.lib.netcommands as nc
+from app.common.lib.network import Server
+import app.common.lib.netcommands as nc
 
 from .input import Input
 from . import processor
 
 
 logger = logging.getLogger(__name__)
-
-
-# class LightServerClient(ServerClient):
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.monitor = False
-#         self.exclusive = set()
 
 
 class AudioCaptureCommand(Command):
@@ -41,22 +34,28 @@ class AudioCaptureCommand(Command):
             processor.IdleProcessor(config),
         ]
 
-        with Input.get_input(config) as capture:
-            import time
-            f=0
-            t=time.perf_counter()
-            while not stop_event.is_set():
-                res = capture.read()
-                data = {}
-                for p in processors:
-                    p.process(res, data)
-                # print(data)
-                # if res is None:
-                #     print(None)
-                # else:
-                #     print(len(res))
-                f += 1
-                if time.perf_counter() - t >= 1:
-                    t = time.perf_counter()
-                    print(f)
-                    f = 0
+        # Empty command set to ensure input is processed, but any commands are invalid
+        command_set = nc.CommandSet()
+        nconfig = config.get('Capture', {}).get('Bind', {})
+        server = Server(args.host or nconfig.get('Host') or '127.0.0.1', port=args.port or nconfig.get('Port') or 37731)
+        try:
+            with Input.get_input(config) as capture:
+                while not stop_event.is_set():
+                    res = capture.read()
+                    data = {}
+                    for p in processors:
+                        p.process(res, data)
+
+                    new, ready, disc = server.process(0)
+                    for cl in new:
+                        logger.info("New client: %s", cl.addr)
+                        cl.write("WELCOME\n")
+                    for cl in ready:
+                        command_set.run_for(cl)
+                    for cl in disc:
+                        logger.info("Disconnect client: %s", cl.addr)
+
+                    data['audio'] = list(data['audio']) if data['audio'] is not None else None
+                    server.write_all("AUDIO {}\n".format(json.dumps(data)))
+        finally:
+            server.close("QUIT\n")

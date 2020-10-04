@@ -18,6 +18,9 @@ Capture:
   SampleRate: 44100
   FPS: 60
   Device: 99
+  Bind:
+    Host: '0.0.0.0'
+    Port: 37731
 Processors:
   Smoothing:
     RollingHistory: 2
