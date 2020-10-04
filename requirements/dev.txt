@@ -1,1 +1,2 @@
 -r lightserver.txt
+-r audiocapture.txt

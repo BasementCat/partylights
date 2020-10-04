@@ -13,3 +13,8 @@ LightServer:
   Bind:
     Host: '0.0.0.0'
     Port: 37730
+Capture:
+  Method: pyaudio
+  SampleRate: 44100
+  FPS: 60
+  Device: 99

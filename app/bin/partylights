@@ -19,10 +19,11 @@ def add_commands(parser):
     subparsers = parser.add_subparsers(dest='command')
 
     from app.lightserver import LightServerCommand
+    from app.audiocapture import AudioCaptureCommand
 
     commands = {}
 
-    for cls in (LightServerCommand,):
+    for cls in (LightServerCommand, AudioCaptureCommand):
         i = cls()
         commands[i.create_subparser(subparsers)] = i
 
