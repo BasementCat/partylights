@@ -13,6 +13,7 @@ class LightServerClient(ServerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.monitor = False
+        self.exclusive = False
 
 
 class LightServerCommand(Command):
@@ -116,6 +117,11 @@ class LightServerCommand(Command):
 
             props[k] = v
 
+        for cl in self.server.clients.values():
+            if cl.exclusive and cl is not client:
+                client.write(f"ERROR {command} :Another client is exclusive\n")
+                return
+
         for light in lights:
             light.set_state(**props)
             state = ' '.join((f'{k}={v}' for k, v in light.diff_state.items()))
@@ -130,3 +136,20 @@ class LightServerCommand(Command):
                 return
 
         client.write(f"MONITOR {int(client.monitor)}\n")
+
+    def cmd_exclusive(self, client, command, state=None, *args):
+        if state is not None:
+            try:
+                state = bool(int(state))
+                if state:
+                    # Can't go exclusive if any other clients are
+                    for cl in self.server.clients.values():
+                        if cl.exclusive and cl is not client:
+                            client.write(f"ERROR {command} {int(state)} :Another client is exclusive\n")
+                            return
+                client.exclusive = state
+            except (TypeError, ValueError):
+                client.write(f"ERROR {command} {state} :Not an integer\n")
+                return
+
+        client.write(f"EXCLUSIVE {int(client.exclusive)}\n")
