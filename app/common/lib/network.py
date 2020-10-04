@@ -104,9 +104,10 @@ class Server:
 
         return new, ready, disc
 
-    def write_all(self, data):
+    def write_all(self, data, filter_fn=None):
         for cl in self.clients.values():
-            cl.write(data)
+            if not filter_fn or filter_fn(cl):
+                cl.write(data)
 
     def close(self, data=None):
         if data:

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class LightServerClient(ServerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.monitor = False
 
 
 class LightServerCommand(Command):
@@ -118,4 +119,14 @@ class LightServerCommand(Command):
         for light in lights:
             light.set_state(**props)
             state = ' '.join((f'{k}={v}' for k, v in light.diff_state.items()))
-            client.write(f"STATE {light.name} {state}\n")
+            self.server.write_all(f"STATE {light.name} {state}\n", filter_fn=lambda cl: cl.monitor or cl is client)
+
+    def cmd_monitor(self, client, command, state=None, *args):
+        if state is not None:
+            try:
+                client.monitor = bool(int(state))
+            except (TypeError, ValueError):
+                client.write(f"ERROR {command} {state} :Not an integer\n")
+                return
+
+        client.write(f"MONITOR {int(client.monitor)}\n")
