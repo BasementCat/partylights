@@ -67,7 +67,20 @@ class LightServerCommand(Command):
             if not fn:
                 client.write(f"ERROR {command} :Invalid command\n")
                 continue
-            fn(client, command, *args, last)
+
+            if last:
+                args += last
+            try:
+                fn(client, command, *args)
+            except TypeError as e:
+                if 'positional argument' in str(e):
+                    client.write(f"ERROR {command} :Missing argument(s)\n")
+                else:
+                    logger.error("Unexpected error running %s: %s", command, e, exc_info=True)
+                    client.write(f"ERROR {command} :Unexpected error\n")
+            except Exception as e:
+                logger.error("Unexpected error running %s: %s", command, e, exc_info=True)
+                client.write(f"ERROR {command} :Unexpected error\n")
 
     def cmd_lights(self, client, command, light=None, *args):
         if light:
@@ -81,3 +94,28 @@ class LightServerCommand(Command):
         for name, light in lights.items():
             client.write(f"LIGHT {name} :" + json.dumps(light.dump()) + '\n')
         client.write("END\n")
+
+    def cmd_state(self, client, command, light, *args):
+        try:
+            lights = list(self.lights.values()) if light == '*' else [self.lights[light]]
+        except KeyError:
+            client.write(f"ERROR {command} {light} :Invalid light\n")
+
+        props = {}
+        for a in args:
+            if '=' not in a:
+                client.write(f"ERROR {command} {a} :Invalid format\n")
+                return
+            k, v = a.split('=', 1)
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                client.write(f"ERROR {command} {a} :Not an integer\n")
+                return
+
+            props[k] = v
+
+        for light in lights:
+            light.set_state(**props)
+            state = ' '.join((f'{k}={v}' for k, v in light.diff_state.items()))
+            client.write(f"STATE {light.name} {state}\n")
