@@ -8,6 +8,7 @@ from app.common.lib.command import Command
 # import app.common.lib.netcommands as nc
 
 from .input import Input
+from . import processor
 
 
 logger = logging.getLogger(__name__)
@@ -33,12 +34,23 @@ class AudioCaptureCommand(Command):
             stop_event.set()
         signal.signal(signal.SIGINT, _sighandler)
 
+        processors = [
+            processor.SmoothingProcessor(config),
+            processor.BeatProcessor(config),
+            processor.PitchProcessor(config),
+            processor.IdleProcessor(config),
+        ]
+
         with Input.get_input(config) as capture:
             import time
             f=0
             t=time.perf_counter()
             while not stop_event.is_set():
                 res = capture.read()
+                data = {}
+                for p in processors:
+                    p.process(res, data)
+                # print(data)
                 # if res is None:
                 #     print(None)
                 # else:

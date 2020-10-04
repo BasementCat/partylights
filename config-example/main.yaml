@@ -18,3 +18,10 @@ Capture:
   SampleRate: 44100
   FPS: 60
   Device: 99
+Processors:
+  Smoothing:
+    RollingHistory: 2
+    FFTBins: 24
+    MinVolumeThreshold: 1e-7
+  Idle:
+    Threshold: 0.07
