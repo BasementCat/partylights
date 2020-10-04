@@ -4,7 +4,8 @@ import json
 from app.common.lib.command import Command
 from app.common.lib.network import Server, ServerClient
 import app.common.lib.netcommands as nc
-from .bases import Light
+from .bases import Light, DMXLight
+from .dmx import DMXDevice
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,12 @@ class LightServerCommand(Command):
             if name in self.lights:
                 raise RuntimeError(f"The light {name} is defined more than once, somehow")
             self.lights[name] = Light.create_from(config, name, lconfig)
+
+        dmx_devices = {k: DMXDevice(v) for k, v in config.get('DMXDevices', {}).items()}
+        if not dmx_devices:
+            raise RuntimeError("No DMX devices are configured")
+        if not dmx_devices.get('default'):
+            raise RuntimeError("The default DMX device is not configured")
 
         def validate_light(command, arg, value):
             if value != '*':
@@ -57,7 +64,7 @@ class LightServerCommand(Command):
                 for cl in disc:
                     logger.info("Disconnect client: %s", cl.addr)
 
-                # TODO: Send DMX
+                DMXLight.send_batch(dmx_devices, self.lights.values())
         except KeyboardInterrupt:
             return 0
         finally:
