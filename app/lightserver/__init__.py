@@ -14,7 +14,7 @@ class LightServerClient(ServerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.monitor = False
-        self.exclusive = False
+        self.exclusive = set()
 
 
 class LightServerCommand(Command):
@@ -40,7 +40,7 @@ class LightServerCommand(Command):
             nc.CommandParser('lights', self.cmd_lights, light=[str, 0, [validate_light]]),
             nc.CommandParser('state', self.cmd_state, light=[str, 0, [validate_light]], state=['kv', int, '*']),
             nc.CommandParser('monitor', self.cmd_monitor, state=[int, 0]),
-            nc.CommandParser('exclusive', self.cmd_exclusive, state=[int, 0]),
+            nc.CommandParser('exclusive', self.cmd_exclusive, state=[int, 0], lights=[str, '*', [validate_light]]),
         )
 
         nconfig = config.get('LightServer', {}).get('Bind', {})
@@ -72,10 +72,13 @@ class LightServerCommand(Command):
 
     def cmd_state(self, client, command):
         lights = list(self.lights.values()) if command.light == '*' or command.light is None else [self.lights[command.light]]
+        light_names = set((l.name for l in lights))
 
         for cl in self.server.clients.values():
             if cl.exclusive and cl is not client:
-                raise nc.CommandError(message='Another client is exclusive')
+                failed = light_names & cl.exclusive
+                if failed:
+                    raise nc.CommandError(message='Another client is exclusive for ' + str(failed))
 
         for light in lights:
             light.set_state(**command.state)
@@ -90,11 +93,24 @@ class LightServerCommand(Command):
     def cmd_exclusive(self, client, command):
         if command.state is not None:
             state = bool(command.state)
+            lights = set(command.lights or self.lights.keys())
             if state:
                 # Can't go exclusive if any other clients are
                 for cl in self.server.clients.values():
                     if cl.exclusive and cl is not client:
-                        raise nc.CommandError(message='Another client is exclusive')
-            client.exclusive = state
+                        # Determine if this client can gain exclusivity on the lights requested
+                        failed = cl.exclusive & lights
+                        if failed:
+                            raise nc.CommandError(message='Another client is exclusive for ' + str(failed))
+                # Not failed at this point, add the list of lights to the client
+                client.exclusive |= lights
+            else:
+                client.exclusive -= lights
 
-        client.write(f"EXCLUSIVE {int(client.exclusive)}\n")
+        if client.exclusive:
+            if client.exclusive == set(self.lights.keys()):
+                client.write(f"EXCLUSIVE *\n")
+            else:
+                client.write(f"EXCLUSIVE " + str(len(client.exclusive)) + ' ' + ' '.join(client.exclusive) + '\n')
+        else:
+            client.write("EXCLUSIVE 0\n")
