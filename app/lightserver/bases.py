@@ -15,6 +15,12 @@ class Light:
     def __str__(self):
         return f'{self.type_name} {self.name}'
 
+    def dump(self):
+        return {
+            'Name': self.name,
+            'Type': self.type_name,
+        }
+
     @classmethod
     def get_bases(cls):
         return {c.RAW_TYPE: c for c in cls.__subclasses__()}
@@ -45,6 +51,17 @@ class DMXLight(Light):
         self.last_state = self.state.copy()
         # On init, pretend everything has changed
         self.diff_state = self.state.copy()
+
+    def dump(self):
+        out = super().dump()
+        out.update({
+            'Device': self.device_name,
+            'Channels': self.num_channels,
+            'Functions': self.functions,
+            'Initialize': self.initialize,
+            'Address': self.address,
+        })
+        return out
 
     def get_dmx(self):
         out = {}

@@ -55,15 +55,20 @@ class Server:
         if addr.startswith('unix://'):
             self.server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.unix_path = addr[7:]
+            self.server_sock.setblocking(0)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             self.server_sock.bind(self.unix_path)
         else:
             if not port:
                 raise ValueError("Port must not be none with IP addresses")
             addr = ipaddress.ip_address(addr)
             self.server_sock = socket.socket(socket.AF_INET6 if addr.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
+            self.server_sock.setblocking(0)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             self.server_sock.bind((str(addr), port))
 
-        # TODO: nonblock
         self.server_sock.listen()
 
         self.client_class = client_class

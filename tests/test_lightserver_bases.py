@@ -464,6 +464,72 @@ class TestLightserverDMXLight(TestCase):
                 print('TEST>', name, tconfig, lconfig)
                 raise
 
+    def test_dump(self):
+        self.maxDiff = None
+        i = bases.Light.create_from(TEST_CONFIG, 'back_1', TEST_CONFIG['Lights']['back_1'])
+        self.assertEqual(
+            {'Address': 1,
+            'Channels': 11,
+            'Device': 'default',
+            'Functions': {'color': {'channel': 5,
+                                 'map': {'blue': [40, 49],
+                                         'blue_green': [100, 109],
+                                         'cyan': [30, 39],
+                                         'cyan_blue': [110, 119],
+                                         'green': [50, 59],
+                                         'green_pink': [90, 99],
+                                         'orange': [20, 29],
+                                         'orange_cyan': [120, 129],
+                                         'pink': [60, 69],
+                                         'pink_red': [80, 89],
+                                         'red': [70, 79],
+                                         'white': [0, 9],
+                                         'yellow': [10, 19],
+                                         'yellow_orange': [130, 139]},
+                                 'type': 'static'},
+                       'dim': {'channel': 8},
+                       'gobo': {'channel': 6,
+                                'map': {'3_spot_circle': [24, 31],
+                                        'broken_circle': [8, 15],
+                                        'burst': [16, 23],
+                                        'dither_3_spot_circle': [88, 95],
+                                        'dither_broken_circle': [72, 79],
+                                        'dither_burst': [80, 87],
+                                        'dither_droplets': [104, 111],
+                                        'dither_none': [64, 71],
+                                        'dither_square_spots': [96, 103],
+                                        'dither_stripes': [120, 127],
+                                        'dither_swirl': [112, 119],
+                                        'droplets': [40, 47],
+                                        'none': [0, 7],
+                                        'square_spots': [32, 39],
+                                        'stripes': [56, 63],
+                                        'swirl': [48, 55]},
+                                'type': 'static'},
+                       'mode': {'channel': 10,
+                                'map': {'auto0': [135, 159],
+                                        'auto1': [110, 134],
+                                        'auto2': [85, 109],
+                                        'auto3': [60, 84],
+                                        'manual': [0, 59],
+                                        'sound0': [235, 255],
+                                        'sound1': [210, 234],
+                                        'sound2': [185, 209],
+                                        'sound3': [160, 184]},
+                                'type': 'static'},
+                       'pan': {'channel': 1},
+                       'pan_fine': {'channel': 2},
+                       'reset': {'channel': 11, 'resets': True, 'type': 'boolean'},
+                       'speed': {'channel': 9, 'invert': True},
+                       'strobe': {'channel': 7, 'invert': True},
+                       'tilt': {'channel': 3},
+                       'tilt_fine': {'channel': 4}},
+            'Initialize': {},
+            'Name': 'back_1',
+            'Type': 'UnnamedGobo'},
+            i.dump()
+        )
+
     def test_init_state(self):
         i = bases.Light.create_from(TEST_CONFIG, 'back_1', TEST_CONFIG['Lights']['back_1'])
         self.assertEqual(
