@@ -3,6 +3,7 @@ import json
 
 from app.common.lib.command import Command
 from app.common.lib.network import Server, ServerClient
+import app.common.lib.netcommands as nc
 from .bases import Light
 
 
@@ -30,6 +31,18 @@ class LightServerCommand(Command):
                 raise RuntimeError(f"The light {name} is defined more than once, somehow")
             self.lights[name] = Light.create_from(config, name, lconfig)
 
+        def validate_light(command, arg, value):
+            if value != '*':
+                if value not in self.lights:
+                    raise nc.CommandError(command=command, arg=arg, value=value, message="Not a valid light")
+
+        command_set = nc.CommandSet(
+            nc.CommandParser('lights', self.cmd_lights, light=[str, 0, [validate_light]]),
+            nc.CommandParser('state', self.cmd_state, light=[str, 0, [validate_light]], state=['kv', int, '*']),
+            nc.CommandParser('monitor', self.cmd_monitor, state=[int, 0]),
+            nc.CommandParser('exclusive', self.cmd_exclusive, state=[int, 0]),
+        )
+
         nconfig = config.get('LightServer', {}).get('Bind', {})
         self.server = None
         try:
@@ -40,116 +53,48 @@ class LightServerCommand(Command):
                     logger.info("New client: %s", cl.addr)
                     cl.write("WELCOME\n")
                 for cl in ready:
-                    self.process_commands(cl)
+                    command_set.run_for(cl)
                 for cl in disc:
                     logger.info("Disconnect client: %s", cl.addr)
+
+                # TODO: Send DMX
         except KeyboardInterrupt:
             return 0
         finally:
             if self.server:
                 self.server.close('QUIT\n')
 
-    def process_commands(self, client):
-        while True:
-            data = client.read()
-            if not data:
-                break
-
-            if ' ' in data:
-                command, args = data.split(' ', 1)
-                last = None
-                if ':' in args:
-                    args, last = data.split(' :', 1)
-                args = args.split(' ')
-            else:
-                command = data
-                args = []
-                last = None
-            fn = getattr(self, 'cmd_' + command.lower(), None)
-            if not fn:
-                client.write(f"ERROR {command} :Invalid command\n")
-                continue
-
-            if last:
-                args += last
-            try:
-                fn(client, command, *args)
-            except TypeError as e:
-                if 'positional argument' in str(e):
-                    client.write(f"ERROR {command} :Missing argument(s)\n")
-                else:
-                    logger.error("Unexpected error running %s: %s", command, e, exc_info=True)
-                    client.write(f"ERROR {command} :Unexpected error\n")
-            except Exception as e:
-                logger.error("Unexpected error running %s: %s", command, e, exc_info=True)
-                client.write(f"ERROR {command} :Unexpected error\n")
-
-    def cmd_lights(self, client, command, light=None, *args):
-        if light:
-            if light not in self.lights:
-                client.write(f"ERROR {command} {light} :Invalid light\n")
-                return
-            lights = {light: self.lights[light]}
-        else:
-            lights = self.lights
-
+    def cmd_lights(self, client, command):
+        lights = {command.light: self.lights[command.light]} if command.light else self.lights
         for name, light in lights.items():
             client.write(f"LIGHT {name} :" + json.dumps(light.dump()) + '\n')
         client.write("END\n")
 
-    def cmd_state(self, client, command, light, *args):
-        try:
-            lights = list(self.lights.values()) if light == '*' else [self.lights[light]]
-        except KeyError:
-            client.write(f"ERROR {command} {light} :Invalid light\n")
-
-        props = {}
-        for a in args:
-            if '=' not in a:
-                client.write(f"ERROR {command} {a} :Invalid format\n")
-                return
-            k, v = a.split('=', 1)
-            try:
-                v = int(v)
-            except (TypeError, ValueError):
-                client.write(f"ERROR {command} {a} :Not an integer\n")
-                return
-
-            props[k] = v
+    def cmd_state(self, client, command):
+        lights = list(self.lights.values()) if command.light == '*' or command.light is None else [self.lights[command.light]]
 
         for cl in self.server.clients.values():
             if cl.exclusive and cl is not client:
-                client.write(f"ERROR {command} :Another client is exclusive\n")
-                return
+                raise nc.CommandError(command=command.command, message='Another client is exclusive')
 
         for light in lights:
-            light.set_state(**props)
+            light.set_state(**command.state)
             state = ' '.join((f'{k}={v}' for k, v in light.diff_state.items()))
             self.server.write_all(f"STATE {light.name} {state}\n", filter_fn=lambda cl: cl.monitor or cl is client)
 
-    def cmd_monitor(self, client, command, state=None, *args):
-        if state is not None:
-            try:
-                client.monitor = bool(int(state))
-            except (TypeError, ValueError):
-                client.write(f"ERROR {command} {state} :Not an integer\n")
-                return
-
+    def cmd_monitor(self, client, command):
+        if command.state is not None:
+            client.monitor = bool(command.state)
         client.write(f"MONITOR {int(client.monitor)}\n")
 
-    def cmd_exclusive(self, client, command, state=None, *args):
-        if state is not None:
-            try:
-                state = bool(int(state))
-                if state:
-                    # Can't go exclusive if any other clients are
-                    for cl in self.server.clients.values():
-                        if cl.exclusive and cl is not client:
-                            client.write(f"ERROR {command} {int(state)} :Another client is exclusive\n")
-                            return
-                client.exclusive = state
-            except (TypeError, ValueError):
-                client.write(f"ERROR {command} {state} :Not an integer\n")
-                return
+    def cmd_exclusive(self, client, command):
+        if command.state is not None:
+            state = bool(command.state)
+            if state:
+                # Can't go exclusive if any other clients are
+                for cl in self.server.clients.values():
+                    if cl.exclusive and cl is not client:
+                        raise nc.CommandError(command=command.command, message='Another client is exclusive')
+            client.exclusive = state
 
         client.write(f"EXCLUSIVE {int(client.exclusive)}\n")
