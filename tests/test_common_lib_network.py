@@ -22,7 +22,7 @@ class TestServer(TestCase):
 
             s.sendall(b'foobar\n')
             self.assertEqual(([], [c], []), server.process(0.01))
-            self.assertEqual('foobar', c.read())
+            self.assertEqual('foobar', c.readline())
             c.write('bazquux\n')
             self.assertEqual(b'bazquux\n', s.recv(16))
 
@@ -49,7 +49,7 @@ class TestServer(TestCase):
 
             s.sendall(b'foobar\n')
             self.assertEqual(([], [c], []), server.process(0.01))
-            self.assertEqual('foobar', c.read())
+            self.assertEqual('foobar', c.readline())
             c.write('bazquux\n')
             self.assertEqual(b'bazquux\n', s.recv(16))
 
@@ -76,7 +76,7 @@ class TestServer(TestCase):
 
             s.sendall(b'foobar\n')
             self.assertEqual(([], [c], []), server.process(0.01))
-            self.assertEqual('foobar', c.read())
+            self.assertEqual('foobar', c.readline())
             c.write('bazquux\n')
             self.assertEqual(b'bazquux\n', s.recv(16))
 

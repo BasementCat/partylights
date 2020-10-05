@@ -210,7 +210,7 @@ class CommandSet:
 
     def run_for(self, client):
         while True:
-            data = client.read()
+            data = client.readline()
             if not data:
                 break
             try:

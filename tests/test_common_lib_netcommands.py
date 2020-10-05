@@ -206,7 +206,7 @@ class TestCommandSet(TestCase):
                 self.data = list(data)
                 self.written = []
 
-            def read(self):
+            def readline(self):
                 if self.data:
                     return self.data.pop(0)
 

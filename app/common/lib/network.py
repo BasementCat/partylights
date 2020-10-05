@@ -47,37 +47,46 @@ class ConnectableMixin:
             os.unlink(self.unix_path)
 
 
-class ServerClient:
+class LineBufferedMixin:
+    def _get_socket(self):
+        raise NotImplementedError()
+
+    def _read_raw(self):
+        if not hasattr(self, '_raw_buf'):
+            self._raw_buf = b''
+        if not hasattr(self, '_line_buf'):
+            self._line_buf = []
+        data = self._get_socket().recv(8192)
+        if data == b'':
+            raise Disconnected()
+        self._raw_buf += data
+        partial = not self._raw_buf.endswith(b'\n')
+        chunks = list(filter(None, self._raw_buf.split(b'\n')))
+        if partial:
+            self._raw_buf = chunks.pop()
+        for chunk in chunks:
+            try:
+                self._line_buf.append(chunk.decode('utf-8'))
+            except UnicodeDecodeError:
+                logger.error("Failed to decode a message: %s", repr(chunk), exc_info=True)
+
+    def readline(self):
+        if getattr(self, '_line_buf', None):
+            return self._line_buf.pop(0)
+
+
+class ServerClient(LineBufferedMixin):
     def __init__(self, sock):
         self.sock = sock
         self.addr = sock.getpeername()
-        self.raw_buf = b''
-        self.buf = []
+
+    def _get_socket(self):
+        return self.sock
 
     def write(self, data):
         if not isinstance(data, bytes):
             data = str(data).encode('utf-8')
         self.sock.sendall(data)
-
-    def _raw_read(self):
-        data = self.sock.recv(8192)
-        if data == b'':
-            raise Disconnected()
-        self.raw_buf += data
-        partial = not self.raw_buf.endswith(b'\n')
-        chunks = list(filter(None, data.split(b'\n')))
-        if partial:
-            self.raw_buf = chunks.pop()
-        for chunk in chunks:
-            try:
-                self.buf.append(chunk.decode('utf-8'))
-            except UnicodeDecodeError:
-                logger.error("Failed to decode a message: %s", repr(chunk), exc_info=True)
-
-    def read(self):
-        if self.buf:
-            return self.buf.pop(0)
-        return None
 
 
 class Server(ConnectableMixin):
@@ -111,7 +120,7 @@ class Server(ConnectableMixin):
                     sock.close()
                 else:
                     try:
-                        cl._raw_read()
+                        cl._read_raw()
                     except Disconnected:
                         disc.append(cl)
                         sock.close()
