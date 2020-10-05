@@ -3,6 +3,7 @@ import select
 import logging
 import ipaddress
 import os
+import uuid
 
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,35 @@ class LineBufferedMixin:
             return self._line_buf.pop(0)
 
 
+class SelectableMixin:
+    @property
+    def selectable_id(self):
+        if not hasattr(self, '_selectable_id'):
+            self._selectable_id = str(uuid.uuid4())
+        return self._selectable_id
+
+    def _get_sockets(self):
+        raise NotImplementedError()
+
+    def _notify_sockets(self, ready):
+        raise NotImplementedError()
+
+
+class SelectableCollection(list):
+    def do_select(timeout=1):
+        sock_item_map = {}
+        for item in self:
+            for sock in item._get_sockets():
+                sock_item_map[sock] = item
+        r, _, _ = select.select(list(sock_item_map.keys(), [], [], timeout))
+        groups = {}
+        for sock in r:
+            item = sock_item_map[sock]
+            groups.setdefault(item.selectable_id, (item, []))[1].append(sock)
+        for item, socks in groups.values():
+            yield item, item._notify_sockets(socks)
+
+
 class ServerClient(LineBufferedMixin):
     def __init__(self, sock):
         self.sock = sock
@@ -89,7 +119,7 @@ class ServerClient(LineBufferedMixin):
         self.sock.sendall(data)
 
 
-class Server(ConnectableMixin):
+class Server(ConnectableMixin, SelectableMixin):
     def __init__(self, addr, port=None, client_class=ServerClient):
         """\
         addr may be an ipv4/ipv6 address string or a string of the format 'unix:///path/to/socketfile' for a unix socket
@@ -100,13 +130,15 @@ class Server(ConnectableMixin):
         self.client_class = client_class
         self.clients = {}
 
-    def process(self, timeout=1):
+    def _get_sockets(self):
+        return [self.server_sock] + [c.sock for c in self.clients.values()]
+
+    def _notify_sockets(self, s_ready):
         new = []
         ready = []
         disc = []
 
-        r, _, _ = select.select([self.server_sock] + [c.sock for c in self.clients.values()], [], [], timeout)
-        for sock in r:
+        for sock in s_ready:
             if sock is self.server_sock:
                 c_sock, c_addr = sock.accept()
                 cl =self.client_class(c_sock)
@@ -129,6 +161,11 @@ class Server(ConnectableMixin):
                         ready.append(cl)
 
         return new, ready, disc
+
+    def process(self, timeout=1):
+        # In cases where the SelectableCollection is not needed, just do the work ourselves
+        r, _, _ = select.select(self._get_sockets(), [], [], timeout)
+        return self._notify_sockets(r)
 
     def write_all(self, data, filter_fn=None):
         for cl in self.clients.values():
