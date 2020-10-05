@@ -12,6 +12,41 @@ class Disconnected(Exception):
     pass
 
 
+class ConnectableMixin:
+    def _create_socket(self, addr, port, is_server):
+        self.unix_path = None
+        if addr.startswith('unix://'):
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.unix_path = addr[7:]
+            if is_server:
+                sock.setblocking(0)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                sock.bind(self.unix_path)
+                sock.listen()
+            else:
+                sock.connect(self.unix_path)
+        else:
+            if not port:
+                raise ValueError("Port must not be none with IP addresses")
+            addr = ipaddress.ip_address(addr)
+            sock = socket.socket(socket.AF_INET6 if addr.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
+            if is_server:
+                sock.setblocking(0)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                sock.bind((str(addr), port))
+                sock.listen()
+            else:
+                sock.connect((str(addr), port))
+
+        return sock
+
+    def _cleanup(self):
+        if self.unix_path and os.path.exists(self.unix_path):
+            os.unlink(self.unix_path)
+
+
 class ServerClient:
     def __init__(self, sock):
         self.sock = sock
@@ -45,31 +80,13 @@ class ServerClient:
         return None
 
 
-class Server:
+class Server(ConnectableMixin):
     def __init__(self, addr, port=None, client_class=ServerClient):
         """\
         addr may be an ipv4/ipv6 address string or a string of the format 'unix:///path/to/socketfile' for a unix socket
         If it's an ipv4/ipv6 address, port is required
         """
-        self.unix_path = None
-        if addr.startswith('unix://'):
-            self.server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self.unix_path = addr[7:]
-            self.server_sock.setblocking(0)
-            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            self.server_sock.bind(self.unix_path)
-        else:
-            if not port:
-                raise ValueError("Port must not be none with IP addresses")
-            addr = ipaddress.ip_address(addr)
-            self.server_sock = socket.socket(socket.AF_INET6 if addr.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
-            self.server_sock.setblocking(0)
-            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            self.server_sock.bind((str(addr), port))
-
-        self.server_sock.listen()
+        self.server_sock = self._create_socket(addr, port, True)
 
         self.client_class = client_class
         self.clients = {}
@@ -115,5 +132,4 @@ class Server:
         for cl in self.clients.values():
             cl.sock.close()
         self.server_sock.close()
-        if self.unix_path and os.path.exists(self.unix_path):
-            os.unlink(self.unix_path)
+        self._cleanup()
