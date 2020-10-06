@@ -115,3 +115,69 @@ class TestServer(TestCase):
         finally:
             if server:
                 server.close()
+
+
+    def test_server_client_selectable(self):
+        server = c1 = c2 = None
+        try:
+            server = network.Server('127.0.0.1', 12345)
+            c1 = network.Client('127.0.0.1', 12345)
+            c2 = network.Client('127.0.0.1', 12345)
+            coll = network.SelectableCollection([server, c1, c2])
+            self.assertEqual([], list(coll.do_select(0.01)))
+            c1.connect()
+            c2.connect()
+            res = list(coll.do_select(0.01))
+            self.assertEqual(server, res[0][0])
+            self.assertEqual(1, len(res[0][1][0]))
+            self.assertEqual(0, len(res[0][1][1]))
+            self.assertEqual(0, len(res[0][1][2]))
+            res = list(coll.do_select(0.01))
+            self.assertEqual(server, res[0][0])
+            self.assertEqual(1, len(res[0][1][0]))
+            self.assertEqual(0, len(res[0][1][1]))
+            self.assertEqual(0, len(res[0][1][2]))
+            self.assertEqual([], list(coll.do_select(0.01)))
+            server.write_all('foobar\n')
+            c1.write('foobar1\n')
+            c2.write('foobar2\n')
+            res = list(coll.do_select(0.01))
+            self.assertEqual(3, len(res))
+            processed = set()
+            for item, data in res:
+                if item is server:
+                    processed.add('server')
+                    self.assertEqual(0, len(data[0]))
+                    self.assertEqual(2, len(data[1]))
+                    self.assertEqual(0, len(data[2]))
+                    for c in data[1]:
+                        processed.add(c.readline())
+                        self.assertIsNone(c.readline())
+                elif item is c1:
+                    self.assertIsNone(data)
+                    self.assertEqual('foobar', item.readline())
+                    self.assertIsNone(item.readline())
+                    processed.add('c1')
+                elif item is c2:
+                    self.assertIsNone(data)
+                    self.assertEqual('foobar', item.readline())
+                    self.assertIsNone(item.readline())
+                    processed.add('c2')
+            self.assertEqual(set(['server', 'c1', 'c2', 'foobar1', 'foobar2']), processed)
+            self.assertEqual([], list(coll.do_select(0.01)))
+            c1.close()
+            c1 = None
+            c2.close()
+            c2 = None
+            res = list(coll.do_select(0.01))
+            self.assertEqual(server, res[0][0])
+            self.assertEqual(0, len(res[0][1][0]))
+            self.assertEqual(0, len(res[0][1][1]))
+            self.assertEqual(2, len(res[0][1][2]))
+            self.assertEqual([], list(coll.do_select(0.01)))
+        finally:
+            if server:
+                server.close()
+            if c1:
+                c1.close()
+            if c2: c2.close()

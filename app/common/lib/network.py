@@ -57,7 +57,10 @@ class LineBufferedMixin:
             self._raw_buf = b''
         if not hasattr(self, '_line_buf'):
             self._line_buf = []
-        data = self._get_socket().recv(8192)
+        sock = self._get_socket()
+        if not sock:
+            return
+        data = sock.recv(8192)
         if data == b'':
             raise Disconnected()
         self._raw_buf += data
@@ -91,12 +94,12 @@ class SelectableMixin:
 
 
 class SelectableCollection(list):
-    def do_select(timeout=1):
+    def do_select(self, timeout=1):
         sock_item_map = {}
         for item in self:
             for sock in item._get_sockets():
                 sock_item_map[sock] = item
-        r, _, _ = select.select(list(sock_item_map.keys(), [], [], timeout))
+        r, _, _ = select.select(list(sock_item_map.keys()), [], [], timeout)
         groups = {}
         for sock in r:
             item = sock_item_map[sock]
@@ -179,3 +182,37 @@ class Server(ConnectableMixin, SelectableMixin):
             cl.sock.close()
         self.server_sock.close()
         self._cleanup()
+
+
+class Client(ConnectableMixin, SelectableMixin, LineBufferedMixin):
+    def __init__(self, addr, port=None):
+        self.addr = addr
+        self.port = port
+        self.sock = None
+
+    def connect(self):
+        self._raw_buf = b''
+        self._line_buf = []
+        if self.sock:
+            self.sock.close()
+        self.sock = self._create_socket(self.addr, self.port, False)
+
+    def _get_socket(self):
+        return self.sock
+
+    def _get_sockets(self):
+        return [self.sock] if self.sock else []
+
+    def _notify_sockets(self, ready):
+        if ready:
+            self._read_raw()
+
+    def write(self, data):
+        if not isinstance(data, bytes):
+            data = str(data).encode('utf-8')
+        self.sock.sendall(data)
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
