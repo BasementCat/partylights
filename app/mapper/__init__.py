@@ -42,8 +42,8 @@ class MapperCommand(Command):
             raise RuntimeError()
         promises = [
             self.lightclient.call('monitor', state=True).error(_handle_error),
-            self.lightclient.call('lights').error(_handle_error).success(self._init_lights),
-            self.lightclient.call('state').error(_handle_error).success(self._init_state),
+            self.lightclient.call('lights').error(lambda *a: _handle_error('lights', *a)).success(self._init_lights),
+            self.lightclient.call('state').error(lambda *a: _handle_error('state', *a)).success(self._init_state),
         ]
 
         conns = SelectableCollection([audioclient, self.lightclient])
