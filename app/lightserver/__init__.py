@@ -11,6 +11,7 @@ from .dmx import DMXDevice
 logger = logging.getLogger(__name__)
 
 
+E_QUIT = (0, "Quit")
 E_EXCLUSIVE = (1, "Another client is exclusive")
 
 
@@ -43,6 +44,7 @@ class LightServerCommand(Command):
 
         nconfig = config.get('LightServer', {}).get('Bind', {})
         self.server = None
+        self.rpcserver = None
         try:
             self.server = Server(args.host or nconfig.get('Host') or '127.0.0.1', port=args.port or nconfig.get('Port') or 37730, client_class=LightServerClient)
             self.rpcserver = RPCServer(self.server)
@@ -64,8 +66,10 @@ class LightServerCommand(Command):
         except KeyboardInterrupt:
             return 0
         finally:
-            if self.server:
-                self.server.close('QUIT\n')
+            if self.rpcserver:
+                self.rpcserver.close(RPCError(*E_QUIT))
+            else:
+                self.server.close()
 
     def _get_lights(self, param, *lights):
         lights = list(filter(None, lights))

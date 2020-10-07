@@ -94,6 +94,11 @@ class RPCServer:
         else:
             client.write(message)
 
+    def close(self, message=None):
+        if message:
+            self.send(None, message)
+        self.netserver.close()
+
 
 class RPCClient(SelectableMixin):
     VERSION = '2.0'

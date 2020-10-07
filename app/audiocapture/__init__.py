@@ -5,7 +5,7 @@ import json
 
 from app.common.lib.command import Command
 from app.common.lib.network import Server
-from app.common.lib.rpc import RPCServer
+from app.common.lib.rpc import RPCServer, RPCError
 
 from .input import Input
 from . import processor
@@ -58,4 +58,4 @@ class AudioCaptureCommand(Command):
                     data['audio'] = list(data['audio']) if data['audio'] is not None else None
                     rpcserver.send(None, {'type': 'audio', 'data': data})
         finally:
-            server.close("QUIT\n")
+            rpcserver.close(RPCError(0, 'Quit'))
