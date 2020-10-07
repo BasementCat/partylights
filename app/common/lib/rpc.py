@@ -100,13 +100,62 @@ class RPCServer:
         self.netserver.close()
 
 
+class RPCClientPromise:
+    def __init__(self, client):
+        self.client = client
+        self.success_callbacks = []
+        self.error_callbacks = []
+        self.done_callbacks = []
+        self.response = None
+        self.resolved = False
+
+    def __bool__(self):
+        return self.resolved
+
+    def resolve(self, data):
+        self.response = data
+        self.resolved = True
+        self._call_callbacks()
+
+    def _call_callbacks(self):
+        if not self.resolved:
+            return
+        if self.response.get('error'):
+            for cb in self.error_callbacks:
+                cb(self.client, self.response['error'])
+        else:
+            for cb in self.success_callbacks:
+                cb(self.client, self.response.get('result', {}))
+        for cb in self.done_callbacks:
+            cb(self.client, self.response)
+        self.success_callbacks = []
+        self.error_callbacks = []
+        self.done_callbacks = []
+
+    def success(self, cb):
+        self.success_callbacks.append(cb)
+        self._call_callbacks()
+        return self
+
+    def error(self, cb):
+        self.error_callbacks.append(cb)
+        self._call_callbacks()
+        return self
+
+    def done(self, cb):
+        self.done_callbacks.append(cb)
+        self._call_callbacks()
+        return self
+
+
+
 class RPCClient(SelectableMixin):
     VERSION = '2.0'
 
     def __init__(self, netclient, on_notif=None):
         self.netclient = netclient
         self.on_notif = on_notif
-        self.callbacks = {}
+        self.promises = {}
 
     def _get_sockets(self):
         return self.netclient._get_sockets()
@@ -135,20 +184,22 @@ class RPCClient(SelectableMixin):
                     logger.debug("No handler for notification %s", data)
                 continue
 
-            handler = self.callbacks.pop(data['id'], None)
-            if not handler:
-                logger.error("No callback for id %s - %s", data['id'], data)
+            promise = self.promises.pop(data['id'], None)
+            if promise is None:
+                logger.error("No promise for id %s - %s", data['id'], data)
                 continue
-            handler(self, data)
+            promise.resolve(data)
 
     def call(self, method, callback=None, **params):
+        id = str(uuid.uuid4())
         out = {
             'jsonrpc': self.VERSION,
             'method': method,
-            'params': params
+            'params': params,
+            'id': id,
         }
+        self.promises[id] = promise = RPCClientPromise(self)
         if callback:
-            id = str(uuid.uuid4())
-            out['id'] = id
-            self.callbacks[id] = callback
+            promise.done(callback)
         self.netclient.write(json.dumps(out) + '\n')
+        return promise

@@ -89,3 +89,37 @@ class TestRPC(TestCase):
         self.assertEqual(1, len(data))
         self.assertTrue(bool(data[0]['id']))
         self.assertEqual({'method': 'testmethod', 'params': {'foo': 'bar', 'baz': 17}}, data[0]['result'])
+
+    def test_rpc_client_promise(self):
+        data = []
+        testdata = ['successdata', 'errordata']
+        def _wcb(s):
+            d = json.loads(s)
+            td = testdata.pop(0)
+            out = {'jsonrpc': '2.0', 'id': d['id']}
+            k = 'error' if td.startswith('errordata') else 'result'
+            out[k] = td
+            return json.dumps(out).encode('utf-8')
+        netclient = MockClient(write_callback=_wcb)
+        def _scb(rc, d):
+            data.append(('success', d))
+        def _ecb(rc, d):
+            data.append(('error', d))
+        def _dcb(rc, d):
+            data.append(('done', set(d.keys())))
+        client = rpc.RPCClient(netclient)
+        client.process()
+        self.assertEqual([], data)
+        client.call('testmethod').success(_scb).error(_ecb).done(_dcb)
+        client.process()
+        client.call('testmethod').success(_scb).error(_ecb).done(_dcb)
+        client.process()
+        self.assertEqual(
+            [
+                ('success', 'successdata'),
+                ('done', set(('jsonrpc', 'id', 'result'))),
+                ('error', 'errordata'),
+                ('done', set(('jsonrpc', 'id', 'error'))),
+            ],
+            data
+        )
