@@ -5,9 +5,10 @@ from app.common.lib import rpc
 
 
 class MockClient:
-    def __init__(self, *data):
+    def __init__(self, *data, write_callback=None):
         self.addr = ('test', 123)
         self.data = list(data)
+        self.write_callback = write_callback
         self.written = []
 
     def readline(self, decode=True):
@@ -19,10 +20,14 @@ class MockClient:
 
     def write(self, value):
         self.written.append(str(value))
+        if self.write_callback:
+            res = self.write_callback(value)
+            if res is not None:
+                self.data.append(res)
 
 
 class TestRPC(TestCase):
-    def test_rpc(self):
+    def test_rpc_server(self):
         self.maxDiff = None
         def goodmethod(client, method, **kwargs):
             return kwargs
@@ -59,3 +64,28 @@ class TestRPC(TestCase):
         for i, exp in enumerate(exp_res):
             self.assertEqual(exp, json.loads(client.written[i]), "Result " + str(i + 1))
         self.assertEqual(len(exp_res), len(client.written))
+
+    def test_rpc_client(self):
+        data = []
+        netclient = MockClient(b'{"jsonrpc": "2.0", "result": "welcome"}')
+        def _notif(rc, d):
+            data.append(d)
+        client = rpc.RPCClient(netclient, on_notif=_notif)
+        client.process()
+        self.assertEqual([{'jsonrpc': '2.0', 'result': 'welcome'}], data)
+
+        data = []
+        def _wcb(s):
+            d = json.loads(s)
+            return json.dumps({'jsonrpc': '2.0', 'id': d['id'], 'result': {'method': d['method'], 'params': d['params']}}).encode('utf-8')
+        netclient = MockClient(write_callback=_wcb)
+        def _cb(rc, d):
+            data.append(d)
+        client = rpc.RPCClient(netclient)
+        client.process()
+        self.assertEqual([], data)
+        client.call('testmethod', foo='bar', baz=17, callback=_cb)
+        client.process()
+        self.assertEqual(1, len(data))
+        self.assertTrue(bool(data[0]['id']))
+        self.assertEqual({'method': 'testmethod', 'params': {'foo': 'bar', 'baz': 17}}, data[0]['result'])

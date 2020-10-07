@@ -1,5 +1,8 @@
 import json
 import logging
+import uuid
+
+from app.common.lib.network import SelectableMixin
 
 
 logger = logging.getLogger(__name__)
@@ -90,3 +93,57 @@ class RPCServer:
             self.netserver.write_all(message, filter_fn=client)
         else:
             client.write(message)
+
+
+class RPCClient(SelectableMixin):
+    VERSION = '2.0'
+
+    def __init__(self, netclient, on_notif=None):
+        self.netclient = netclient
+        self.on_notif = on_notif
+        self.callbacks = {}
+
+    def _get_sockets(self):
+        return self.netclient._get_sockets()
+
+    def _notify_sockets(self, ready):
+        self.netclient._notify_sockets(ready)
+        self.process()
+
+    def process(self):
+        while True:
+            data = self.netclient.readline()
+            if data is None:
+                break
+
+            try:
+                data = json.loads(data)
+            except:
+                logger.error("Failed to load json: %s", repr(data), exc_info=True)
+                continue
+
+            # TODO: someday should validate version
+            if not data.get('id'):
+                if self.on_notif:
+                    self.on_notif(self, data)
+                else:
+                    logger.debug("No handler for notification %s", data)
+                continue
+
+            handler = self.callbacks.pop(data['id'], None)
+            if not handler:
+                logger.error("No callback for id %s - %s", data['id'], data)
+                continue
+            handler(self, data)
+
+    def call(self, method, callback=None, **params):
+        out = {
+            'jsonrpc': self.VERSION,
+            'method': method,
+            'params': params
+        }
+        if callback:
+            id = str(uuid.uuid4())
+            out['id'] = id
+            self.callbacks[id] = callback
+        self.netclient.write(json.dumps(out) + '\n')
