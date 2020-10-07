@@ -5,7 +5,7 @@ import json
 
 from app.common.lib.command import Command
 from app.common.lib.network import Server
-import app.common.lib.netcommands as nc
+from app.common.lib.rpc import RPCServer
 
 from .input import Input
 from . import processor
@@ -34,10 +34,10 @@ class AudioCaptureCommand(Command):
             processor.IdleProcessor(config),
         ]
 
-        # Empty command set to ensure input is processed, but any commands are invalid
-        command_set = nc.CommandSet()
         nconfig = config.get('Capture', {}).get('Bind', {})
         server = Server(args.host or nconfig.get('Host') or '127.0.0.1', port=args.port or nconfig.get('Port') or 37731)
+        # Empty RPC server to ensure input is processed, but any commands are invalid
+        rpcserver = RPCServer(server)
         try:
             with Input.get_input(config) as capture:
                 while not stop_event.is_set():
@@ -49,13 +49,13 @@ class AudioCaptureCommand(Command):
                     new, ready, disc = server.process(0)
                     for cl in new:
                         logger.info("New client: %s", cl.addr)
-                        cl.write("WELCOME\n")
+                        rpcserver.send(cl, {'type': 'welcome'})
                     for cl in ready:
-                        command_set.run_for(cl)
+                        rpcserver.process_client(cl)
                     for cl in disc:
                         logger.info("Disconnect client: %s", cl.addr)
 
                     data['audio'] = list(data['audio']) if data['audio'] is not None else None
-                    server.write_all("AUDIO {}\n".format(json.dumps(data)))
+                    rpcserver.send(None, {'type': 'audio', 'data': data})
         finally:
             server.close("QUIT\n")
