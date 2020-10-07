@@ -62,7 +62,7 @@ class LightServerCommand(Command):
                         logger.info("New client: %s", cl.addr)
                         self.rpcserver.send(cl, {'type': 'welcome'})
                     for cl in ready:
-                        command_set.run_for(cl)
+                        self.rpcserver.process_client(cl)
                     for cl in disc:
                         logger.info("Disconnect client: %s", cl.addr)
 
@@ -105,7 +105,9 @@ class LightServerCommand(Command):
             for light in lights:
                 light.set_state(**state)
                 out[light.name] = light.diff_state
-            self.rpcserver.send(lambda cl: cl.monitor or cl is client, {'result': out})
+            self.rpcserver.send(lambda cl: cl.monitor and cl is not client, {'result': out})
+            # The requesting client must get the results as a reply
+            return {'result': {'type': 'state', 'data': out}}
         else:
             out = {l.name: l.state for l in lights.values()}
             return {'result': out}
