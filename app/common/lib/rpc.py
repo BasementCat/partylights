@@ -60,7 +60,7 @@ class RPCServer:
                     if not method:
                         raise RPCError(*RPCError.METHOD_NOT_FOUND)
 
-                    res = method(method_name, **data.get('params', {}))
+                    res = method(client, method_name, **data.get('params', {}))
                     out = {'result': res}
                     if data.get('id'):
                         out['id'] = data['id']
@@ -86,5 +86,7 @@ class RPCServer:
         message = json.dumps(message) + '\n'
         if client is None:
             self.netserver.write_all(message)
+        elif callable(client):
+            self.netserver.write_all(message, filter_fn=client)
         else:
             client.write(message)

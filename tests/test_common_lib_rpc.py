@@ -24,9 +24,9 @@ class MockClient:
 class TestRPC(TestCase):
     def test_rpc(self):
         self.maxDiff = None
-        def goodmethod(method, **kwargs):
+        def goodmethod(client, method, **kwargs):
             return kwargs
-        def badmethod(method, **kwargs):
+        def badmethod(client, method, **kwargs):
             raise rpc.RPCError(25, message="x", data="y")
 
         server = rpc.RPCServer(None)
