@@ -68,6 +68,8 @@ class LineBufferedMixin:
         chunks = list(filter(None, self._raw_buf.split(b'\n')))
         if partial:
             self._raw_buf = chunks.pop()
+        else:
+            self._raw_buf = b''
         self._line_buf += chunks
 
     def readline(self, decode=True):
