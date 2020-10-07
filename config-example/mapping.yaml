@@ -1,0 +1,43 @@
+---
+back_1:
+  Program:
+    - {trigger: onset, function: pan, value: random, range: scaled, scale_src: frequency}
+    - {trigger: onset, function: tilt, value: random, range: scaled, scale_src: frequency}
+    - {trigger: frequency, bins: [[13, 20]], function: gobo, value: random, threshold: 0.5}
+    - {trigger: frequency, bins: [[19, 23]], function: strobe, range: scaled, scale_src: tempo, threshold: 0.7, reset: beat}
+    - {trigger: frequency, bins: [[0, 23]], function: color, value: random, threshold: 0.9}
+    # - {trigger: frequency, bins: [[0, 23]], function: dim, range: scaled, threshold: 0.15}
+  Links:
+    mid_1:
+      Invert: [pan]
+    mid_4: true
+
+back_2:
+  Program: back_1
+  Links:
+    mid_2: true
+    mid_3:
+      Invert: [pan]
+
+front_1:
+  Program:
+    - {trigger: onset, function: pan, value: random, range: scaled, scale_src: frequency}
+    - {trigger: onset, function: tilt, value: random, range: scaled, scale_src: frequency}
+    - {trigger: frequency, bins: [[19, 23]], function: strobe, range: scaled, scale_src: tempo, threshold: 0.7, reset: beat}
+    - {trigger: frequency, bins: [[19, 23]], function: white, value: 255, threshold: 0.7}
+    - {trigger: frequency, bins: [[19, 23]], function: white, value: 0, threshold: 0.7, duration: 0.32}
+    - {trigger: frequency, bins: [[0, 23]], function: dim, range: scaled, threshold: 0.15}
+    - {trigger: frequency, bins: [[0, 3]], function: red, range: scaled, threshold: 0.1, duration: 0.25}
+    - {trigger: frequency, bins: [[4, 12]], function: green, range: scaled, threshold: 0.1, duration: 0.25}
+    - {trigger: frequency, bins: [[13, 23]], function: blue, range: scaled, threshold: 0.1, duration: 0.25}
+    - {trigger: frequency, bins: [[0, 23]], function: uv, value: 255, threshold: -0.1, duration: 0.125}
+    - {trigger: frequency, bins: [[0, 23]], function: uv, value: 0, threshold: 0.1}
+  Links:
+    front_2: true
+
+laser:
+  Program:
+    - {trigger: beat, function: pattern}
+    - {trigger: onset, function: x}
+    - {trigger: onset, function: 'y'}
+    - {trigger: beat, function: pattern_size}
