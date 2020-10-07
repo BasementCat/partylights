@@ -68,15 +68,18 @@ class LineBufferedMixin:
         chunks = list(filter(None, self._raw_buf.split(b'\n')))
         if partial:
             self._raw_buf = chunks.pop()
-        for chunk in chunks:
-            try:
-                self._line_buf.append(chunk.decode('utf-8'))
-            except UnicodeDecodeError:
-                logger.error("Failed to decode a message: %s", repr(chunk), exc_info=True)
+        self._line_buf += chunks
 
-    def readline(self):
+    def readline(self, decode=True):
         if getattr(self, '_line_buf', None):
-            return self._line_buf.pop(0)
+            out = self._line_buf.pop(0)
+            if decode:
+                try:
+                    return out.decode('utf-8')
+                except UnicodeDecodeError:
+                    logger.error("Failed to decode a message: %s", repr(out), exc_info=True)
+                    return
+            return out
 
 
 class SelectableMixin:
