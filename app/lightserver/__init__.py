@@ -4,6 +4,7 @@ import json
 from app.common.lib.command import Command
 from app.common.lib.network import Server, ServerClient
 from app.common.lib.rpc import RPCServer, RPCError
+from app.common.lib.fps import FPSCounter
 from .bases import Light, DMXLight
 from .dmx import DMXDevice
 
@@ -42,6 +43,8 @@ class LightServerCommand(Command):
         if not dmx_devices.get('default'):
             raise RuntimeError("The default DMX device is not configured")
 
+        fps = FPSCounter('Light Server')
+
         nconfig = config.get('LightServer', {}).get('Bind', {})
         self.server = None
         self.rpcserver = None
@@ -53,16 +56,17 @@ class LightServerCommand(Command):
             self.rpcserver.register_method('monitor', self.cmd_monitor)
             self.rpcserver.register_method('exclusive', self.cmd_exclusive)
             while True:
-                new, ready, disc = self.server.process()
-                for cl in new:
-                    logger.info("New client: %s", cl.addr)
-                    self.rpcserver.send(cl, {'type': 'welcome'})
-                for cl in ready:
-                    command_set.run_for(cl)
-                for cl in disc:
-                    logger.info("Disconnect client: %s", cl.addr)
+                with fps:
+                    new, ready, disc = self.server.process()
+                    for cl in new:
+                        logger.info("New client: %s", cl.addr)
+                        self.rpcserver.send(cl, {'type': 'welcome'})
+                    for cl in ready:
+                        command_set.run_for(cl)
+                    for cl in disc:
+                        logger.info("Disconnect client: %s", cl.addr)
 
-                DMXLight.send_batch(dmx_devices, self.lights.values())
+                    DMXLight.send_batch(dmx_devices, self.lights.values())
         except KeyboardInterrupt:
             return 0
         finally:

@@ -6,6 +6,7 @@ import json
 from app.common.lib.command import Command
 from app.common.lib.network import Server
 from app.common.lib.rpc import RPCServer, RPCError
+from app.common.lib.fps import FPSCounter
 
 from .input import Input
 from . import processor
@@ -27,6 +28,8 @@ class AudioCaptureCommand(Command):
             stop_event.set()
         signal.signal(signal.SIGINT, _sighandler)
 
+        fps = FPSCounter('Audio Capture')
+
         processors = [
             processor.SmoothingProcessor(config),
             processor.BeatProcessor(config),
@@ -41,21 +44,22 @@ class AudioCaptureCommand(Command):
         try:
             with Input.get_input(config) as capture:
                 while not stop_event.is_set():
-                    res = capture.read()
-                    data = {}
-                    for p in processors:
-                        p.process(res, data)
+                    with fps:
+                        res = capture.read()
+                        data = {}
+                        for p in processors:
+                            p.process(res, data)
 
-                    new, ready, disc = server.process(0)
-                    for cl in new:
-                        logger.info("New client: %s", cl.addr)
-                        rpcserver.send(cl, {'type': 'welcome'})
-                    for cl in ready:
-                        rpcserver.process_client(cl)
-                    for cl in disc:
-                        logger.info("Disconnect client: %s", cl.addr)
+                        new, ready, disc = server.process(0)
+                        for cl in new:
+                            logger.info("New client: %s", cl.addr)
+                            rpcserver.send(cl, {'type': 'welcome'})
+                        for cl in ready:
+                            rpcserver.process_client(cl)
+                        for cl in disc:
+                            logger.info("Disconnect client: %s", cl.addr)
 
-                    data['audio'] = list(data['audio']) if data['audio'] is not None else None
-                    rpcserver.send(None, {'type': 'audio', 'data': data})
+                        data['audio'] = list(data['audio']) if data['audio'] is not None else None
+                        rpcserver.send(None, {'type': 'audio', 'data': data})
         finally:
             rpcserver.close(RPCError(0, 'Quit'))
