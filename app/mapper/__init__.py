@@ -109,14 +109,10 @@ class MapperCommand(Command):
 
     def _run_mapping(self, data):
         if not self.ready:
-            print("not ready...")
             return
-        else:
-            print("Ready!")
-            print(self.lights)
-            print(self.state)
         with self.fps:
             for light_name, mapping in self.mapping.items():
+                state = {}
                 program = mapping.get('Program')
                 if not program:
                     continue
@@ -198,7 +194,10 @@ class MapperCommand(Command):
 
                     value = int(min(255, max(0, value)))
 
-                    print(light_name, directive['function'], value)
+                    # print(light_name, directive['function'], value)
+                    state[directive['function']] = value
+                if state:
+                    self.lightclient.call('state', lights=[light_name], state=state)
 
 
 # back_1:

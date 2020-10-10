@@ -102,7 +102,7 @@ class LightServerCommand(Command):
 
         if state:
             out = {}
-            for light in lights:
+            for light in lights.values():
                 light.set_state(**state)
                 out[light.name] = light.diff_state
             self.rpcserver.send(lambda cl: cl.monitor and cl is not client, {'result': out})
