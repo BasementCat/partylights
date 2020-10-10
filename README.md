@@ -14,7 +14,7 @@ Audio reactive lighting control
 
   1. Check out the code, and create and activate a virtual environment (if desired)
   2. Install dependencies as noted above
-  3. Run `pip install -r requirements/<app>.txt` for whatever components of the application you'll be running (audiocapture, lightserver, mapper)
+  3. Run `pip install -r requirements/<app>.txt` for whatever components of the application you'll be running (audiocapture, lightserver, mapper, webgui)
     - In development, you can install from `requirements/dev.txt` to install all requirements
   4. Install one of the audio capture requirements files:
     - audiocapture-alsa-all.txt for ALSA

@@ -1,2 +1,3 @@
 -r lightserver.txt
 -r audiocapture.txt
+-r webgui.txt

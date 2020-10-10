@@ -21,10 +21,11 @@ def add_commands(parser):
     from app.lightserver import LightServerCommand
     from app.audiocapture import AudioCaptureCommand
     from app.mapper import MapperCommand
+    from app.webgui import WebGUICommand
 
     commands = {}
 
-    for cls in (LightServerCommand, AudioCaptureCommand, MapperCommand):
+    for cls in (LightServerCommand, AudioCaptureCommand, MapperCommand, WebGUICommand):
         i = cls()
         commands[i.create_subparser(subparsers)] = i
 
