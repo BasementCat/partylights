@@ -1,12 +1,9 @@
 import logging
 import json
 
-# from app.common.lib.command import Command
-# from app.common.lib.network import Server, ServerClient
-# from app.common.lib.rpc import RPCServer, RPCError
 from lib.task import Task
 from lib.fps import FPSCounter
-from lib.pubsub import publish, subscribe
+from lib.pubsub import publish, subscribe, unpack_event
 from lib.light.models import Light, DMXLight
 from lib.light.dmx import DMXDevice
 
@@ -44,13 +41,25 @@ class LightOutputTask(Task):
 
     def _loop(self):
         with self.fps:
-            for ev, data in self.events:
-                parts = ev.split('.')
-                parts.pop(0)
-                if parts[0] == 'set_state':
-                    lights = [self.lights.values()] if len(parts) == 1 else list(filter(None, [self.lights.get(parts[1])]))
+            for ev, data, returning in self.events:
+                cmd, args = unpack_event(ev)
+                if cmd == 'set_state':
+                    light_name = args(1)
+                    lights = list(filter(None, [self.lights.get(light_name)])) if light_name else list(self.lights.values())
                     for l in lights:
                         l.set_state(**data)
+                    returning(None)
+                elif cmd == 'get':
+                    what = args(1)
+                    if what == 'lights':
+                        returning(self.lights)
+                    elif what == 'state':
+                        returning({l.name: l.state for l in self.lights.values()})
+                else:
+                    returning(None)
+            for l in self.lights.values():
+                if l.diff_state:
+                    publish('light.state.' + l.name, l.diff_state)
             DMXLight.send_batch(self.dmx_devices, self.lights.values())
 
     # def _get_lights(self, param, *lights):
