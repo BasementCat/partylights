@@ -3,9 +3,6 @@ import signal
 import threading
 import json
 
-# from app.common.lib.command import Command
-# from app.common.lib.network import Server
-# from app.common.lib.rpc import RPCServer, RPCError
 from lib.task import Task
 from lib.pubsub import publish
 from lib.fps import FPSCounter

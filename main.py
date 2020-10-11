@@ -32,10 +32,12 @@ def main(args):
     tasks = TaskManager()
 
     from components.capture import AudioCaptureTask
+    from components.lights import LightOutputTask
 
     try:
         # Add tasks here so that if an exception occurs, any previously started task is stopped
         tasks.add_task(AudioCaptureTask(config))
+        tasks.add_task(LightOutputTask(config))
 
         while not stop_event.is_set():
             tasks.check_tasks()
