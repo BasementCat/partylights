@@ -1,1 +1,15 @@
+# Common
 pyyaml
+
+# Audio capture
+numpy
+scipy
+aubio
+
+# Light server
+DmxPy
+
+# Web GUI
+flask
+flask-bootstrap
+flask-sockets
