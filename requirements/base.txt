@@ -12,4 +12,4 @@ DmxPy
 # Web GUI
 flask
 flask-bootstrap
-flask-sockets
+flask_threaded_sockets
