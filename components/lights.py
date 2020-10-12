@@ -3,7 +3,7 @@ import json
 
 from lib.task import Task
 from lib.fps import FPSCounter
-from lib.pubsub import publish, subscribe, unpack_event
+from lib.pubsub import publish, subscribe
 from lib.light.models import Light, DMXLight
 from lib.light.dmx import DMXDevice
 
@@ -41,22 +41,20 @@ class LightOutputTask(Task):
 
     def _loop(self):
         with self.fps:
-            for ev, data, returning in self.events:
-                cmd, args = unpack_event(ev)
-                if cmd == 'set_state':
-                    light_name = args(1)
-                    lights = list(filter(None, [self.lights.get(light_name)])) if light_name else list(self.lights.values())
-                    for l in lights:
-                        l.set_state(**data)
-                    returning(None)
-                elif cmd == 'get':
-                    what = args(1)
-                    if what == 'lights':
-                        returning(self.lights)
-                    elif what == 'state':
-                        returning({l.name: l.state for l in self.lights.values()})
-                else:
-                    returning(None)
+            for ev in self.events:
+                with ev:
+                    cmd, args = ev.unpack_name()
+                    if cmd == 'set_state':
+                        light_name = args(1)
+                        lights = list(filter(None, [self.lights.get(light_name)])) if light_name else list(self.lights.values())
+                        for l in lights:
+                            l.set_state(**ev.data)
+                    elif cmd == 'get':
+                        what = args(1)
+                        if what == 'lights':
+                            ev.returning(self.lights)
+                        elif what == 'state':
+                            ev.returning({l.name: l.state for l in self.lights.values()})
             for l in self.lights.values():
                 if l.diff_state:
                     publish('light.state.' + l.name, l.diff_state)

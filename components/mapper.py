@@ -4,7 +4,7 @@ import json
 
 from lib.task import Task
 from lib.fps import FPSCounter
-from lib.pubsub import publish, subscribe, unpack_event
+from lib.pubsub import publish, subscribe
 
 
 logger = logging.getLogger(__name__)
@@ -27,16 +27,16 @@ class MapperTask(Task):
 
     def _loop(self):
         with self.fps:
-            for ev, data, returning in self.events:
-                returning(None)
-                if ev == 'audio':
-                    self._run_mapping(data)
+            for ev in self.events:
+                ev.returning()
+                if ev.event == 'audio':
+                    self._run_mapping(ev.data)
                 else:
-                    cmd, args = unpack_event(ev, ignore=0)
+                    cmd, args = ev.unpack_name(ignore=0)
                     if cmd == 'light':
                         what, light = args(2)
                         if what == 'state':
-                            self.state[light].update(data)
+                            self.state[light].update(ev.data)
 
     def _parse_mapping(self, config):
         self.mapping = config.get('Mapping', {})
@@ -145,7 +145,7 @@ class MapperTask(Task):
                     # print(light_name, directive['function'], value)
                     state[directive['function']] = value
                 if state:
-                    publish('light.set_state.' + light_name, state)
+                    publish('light.set_state.' + light_name, state, sender='mapper')
 
 
 # back_1:
