@@ -123,6 +123,8 @@ def create_app(stop_event, open_sockets):
         events = subscribe('light.state.*')
         with WSWrapper(stop_event, open_sockets, ws, events=events) as wrap:
             ws.send(json.dumps(['lights', {k: v.dump() for k, v in (publish('light.get.lights', returning=True) or {}).items()}]))
+            for k, v in (publish('light.get.state', returning=True) or {}).items():
+                ws.send(json.dumps(['state', k, v]))
             while wrap.alive:
                 for ev in events:
                     cmd, args = ev.unpack_name()
