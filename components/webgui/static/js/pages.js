@@ -39,7 +39,10 @@ class MonitorPage extends Page {
     _really_render() {
         this.lights = {};
         for (var name in this.raw_lights) {
-            this.lights[name] = new outputs.Light(this.raw_lights[name]);
+            var light = this.lights[name] = new outputs.Light(this.raw_lights[name]);
+            if (light.is_movinghead) {
+                light.add_output(new outputs.MovingHeadOutput(container, light))
+            }
         }
         new outputs.TableOutput(container, this.lights);
         console.log(this.lights);

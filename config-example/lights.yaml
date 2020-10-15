@@ -3,21 +3,33 @@
 back_1:
   Type: UnnamedGobo
   Address: 1
+  Initialize:
+    dim: 255
 back_2:
   Type: UnnamedGobo
   Address: 12
+  Initialize:
+    dim: 255
 mid_1:
   Type: UKingGobo
   Address: 23
+  Initialize:
+    dim: 255
 mid_2:
   Type: UKingGobo
   Address: 34
+  Initialize:
+    dim: 255
 mid_3:
   Type: UKingGobo
   Address: 45
+  Initialize:
+    dim: 255
 mid_4:
   Type: UKingGobo
   Address: 56
+  Initialize:
+    dim: 255
 front_1:
   Type: TomshineMovingHead6in1
   Address: 67
