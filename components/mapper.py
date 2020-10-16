@@ -1,6 +1,7 @@
 import random
 import logging
 import json
+import time
 
 from lib.task import Task
 from lib.fps import FPSCounter
@@ -17,6 +18,7 @@ class MapperTask(Task):
 
         self.lights = None
         self.state = None
+        self.prop_last_update = {}
 
     def setup_inthread(self):
         self.lights = publish('light.get.lights', returning=True)
@@ -46,6 +48,11 @@ class MapperTask(Task):
                 program = self.mapping.get(program, {}).get('Program')
             data['Program'] = program or []
 
+            cooldown = data.get('Cooldown')
+            while isinstance(cooldown, str):
+                cooldown = self.mapping.get(cooldown, {}).get('Cooldown')
+            data['Cooldown'] = cooldown or {}
+
             def make_bins(bins):
                 for b in bins:
                     try:
@@ -66,6 +73,13 @@ class MapperTask(Task):
                     continue
 
                 for directive in program:
+                    self.prop_last_update \
+                        .setdefault(light_name, {}) \
+                        .setdefault(directive['function'], -10000)
+                    # print(light_name, directive['function'], "last @", self.prop_last_update[light_name][directive['function']], ", now", time.perf_counter(), ", cooldown", mapping.get('Cooldown', {}).get(directive['function'], 0))
+                    if time.perf_counter() - self.prop_last_update[light_name][directive['function']] < mapping.get('Cooldown', {}).get(directive['function'], 0):
+                        continue
+
                     trigger_value = None
                     trigger = directive.get('trigger', 'frequency')
                     scale_src = directive.get('scale_src')
@@ -144,6 +158,7 @@ class MapperTask(Task):
 
                     # print(light_name, directive['function'], value)
                     state[directive['function']] = value
+                    self.prop_last_update[light_name][directive['function']] = time.perf_counter()
                 if state:
                     publish('light.set_state.' + light_name, state, sender='mapper')
                     for linked_name, link_config in (mapping.get('Links') or {}).items():

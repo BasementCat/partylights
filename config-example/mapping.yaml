@@ -11,6 +11,13 @@ back_1:
     mid_1:
       Invert: [pan]
     mid_4: true
+  Cooldown:
+    pan: 0.75
+    tilt: 0.75
+    gobo: 0.25
+    color: 0.25
+    strobe: 10
+    dim: 0.125
 
 back_2:
   Program: back_1
@@ -18,6 +25,7 @@ back_2:
     mid_2: true
     mid_3:
       Invert: [pan]
+  Cooldown: back_1
 
 front_1:
   Program:
@@ -34,6 +42,17 @@ front_1:
     - {trigger: frequency, bins: [[0, 23]], function: uv, value: 0, threshold: 0.1}
   Links:
     front_2: true
+  Cooldown:
+    pan: 0.75
+    tilt: 0.75
+    red: 0.125
+    green: 0.125
+    blue: 0.125
+    white: 0.125
+    amber: 0.125
+    uv: 0.125
+    strobe: 10
+    dim: 0.125
 
 laser:
   Program:
@@ -41,3 +60,9 @@ laser:
     - {trigger: onset, function: x}
     - {trigger: onset, function: 'y'}
     - {trigger: beat, function: pattern_size}
+  Cooldown:
+    mode: 0
+    pattern: 4
+    pattern_size: 5
+    x: 1
+    'y': 1
