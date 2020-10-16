@@ -151,12 +151,11 @@ class MovingHeadOutput extends Output {
     }
 
     _transition_duration(attr) {
-        // TODO: need to get speeds
-        return 1.0;
-        // var ts = this.light.speeds[attr];
-        // if (!ts) return 0;
-        // var s = this.light.state.speed;
-        // return ts[0] + ((s / 255) * (ts[1] - ts[0]));
+        if (!(this.light.functions[attr] && this.light.functions[attr].speed))
+            return 0;
+        let ts = this.light.functions[attr].speed;
+        var s = this.light.state.speed;
+        return ts[0] + ((s / 255) * (ts[1] - ts[0]));
     }
 
     monitor_event(event) {

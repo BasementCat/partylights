@@ -1,15 +1,18 @@
 ---
 # Default function type is range
+# The speed of a function is a pair of how long that function takes to go from it's min to max value at the lowest & highest speeds
 UnnamedGobo:
   RawType: dmx
   Channels: 11
   Functions:
     pan:
       channel: 1
+      speed: [25, 1]
     pan_fine:
       channel: 2
     tilt:
       channel: 3
+      speed: [10, 0.5]
     tilt_fine:
       channel: 4
     color:
@@ -75,16 +78,20 @@ UnnamedGobo:
       channel: 11
       type: boolean
       resets: true
+  Initialize:
+    speed: 255
 UKingGobo:
   RawType: dmx
   Channels: 11
   Functions:
     pan:
       channel: 1
+      speed: [25, 1]
     pan_fine:
       channel: 2
     tilt:
       channel: 3
+      speed: [10, 0.5]
     tilt_fine:
       channel: 4
     color:
@@ -147,16 +154,20 @@ UKingGobo:
         theater: [81, 100]
         reset: [101, 255]
       resets: [101, 255]
+  Initialize:
+    speed: 255
 TomshineMovingHead6in1:
   RawType: dmx
   Channels: 18
   Functions:
     pan:
       channel: 1
+      speed: [25, 1]
     pan_fine:
       channel: 2
     tilt:
       channel: 3
+      speed: [10, 0.5]
     tilt_fine:
       channel: 4
     speed:
@@ -213,6 +224,8 @@ TomshineMovingHead6in1:
       channel: 18
       type: boolean
       resets: true
+  Initialize:
+    speed: 255
 Generic4ColorLaser:
   RawType: dmx
   Channels: 7

@@ -40,7 +40,7 @@ class DMXLight(Light):
         self.device_name = light_config.get('Device', 'default')
         self.num_channels = type_config['Channels']
         self.functions = type_config['Functions']
-        self.initialize = light_config.get('Initialize', {})
+        self.initialize = dict(type_config.get('Initialize', {}), **light_config.get('Initialize', {}))
         self.address = light_config['Address']
         # TODO: light config RestrictPosition, or in auto?
 
