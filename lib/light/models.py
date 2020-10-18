@@ -63,9 +63,11 @@ class DMXLight(Light):
         })
         return out
 
-    def get_dmx(self):
+    def get_dmx(self, speed_only=False):
         out = {}
         for fn, data in self.functions.items():
+            if speed_only and fn != 'speed':
+                continue
             v = self.state.get(fn, 0)
             if data.get('invert'):
                 v = 255 - v
@@ -147,6 +149,14 @@ class DMXLight(Light):
 
     @classmethod
     def send_batch(cls, devices, lights):
+        for l in lights:
+            if l.diff_state:
+                sd = l.get_dmx(speed_only=True)
+                if sd:
+                    for chan, val in sd.items():
+                        devices[l.device_name].setChannel(chan, val)
+                    devices[l.device_name].render()
+
         dev_data = {}
         for l in lights:
             if l.diff_state:

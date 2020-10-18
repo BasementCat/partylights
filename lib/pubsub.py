@@ -27,7 +27,8 @@ class Event:
     def get_returning(self):
         if self._ret_q is not None:
             try:
-                return self._ret_q.get(timeout=3)
+                res = self._ret_q.get(timeout=3)
+                return res
             except queue.Empty:
                 logger.error("Requested return for %s did not return data", self.event)
 
