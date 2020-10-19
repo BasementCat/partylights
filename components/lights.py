@@ -136,7 +136,7 @@ class LightOutputTask(Task):
             speed_config=speed_config,
         )
 
-    def _cancel_effect(self, effect=None, light=None, function=None, explicit=False, keep_state=False):
+    def _cancel_effect(self, effect=None, light=None, function=None, explicit=False, keep_state=False, because_done=False):
         if not (effect or light):
             raise ValueError("Provide effect, or light and optional function")
         if isinstance(light, Light):
@@ -154,13 +154,14 @@ class LightOutputTask(Task):
 
         new_state = {}
         for eff in effects:
+            ev = 'done' if because_done else 'cancelled'
             if explicit:
                 # If the effect was explicitly cancelled, we do not need a return value
-                publish('light.effect.done.' + eff.id, {'effect': eff})
+                publish(f'light.effect.{ev}.{eff.id}', {'effect': eff})
                 if not keep_state:
                     new_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})[eff.function] = eff.start_value
             else:
-                if not publish('light.effect.done.' + eff.id, {'effect': eff}, returning=True):
+                if not publish(f'light.effect.{ev}.{eff.id}', {'effect': eff}, returning=True):
                     new_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})[eff.function] = eff.start_value
             del self.effects[eff.id]
         for sender, lights in new_state.items():
@@ -175,7 +176,7 @@ class LightOutputTask(Task):
                 if eff.speed is None:
                     eff_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})[eff.function] = eff.value
                 if eff.done:
-                    self._cancel_effect(effect=eff)
+                    self._cancel_effect(effect=eff, because_done=True)
             for sender, lights in eff_state.items():
                 for l, s in lights.items():
                     self._set_state(sender, l, s)

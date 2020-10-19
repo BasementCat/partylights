@@ -7,10 +7,37 @@ back_1:
     - {trigger: frequency, bins: [[19, 23]], function: strobe, range: scaled, scale_src: tempo, threshold: 0.7, reset: beat}
     - {trigger: frequency, bins: [[0, 23]], function: color, value: random, threshold: 0.9}
     # - {trigger: frequency, bins: [[0, 23]], function: dim, range: scaled, threshold: 0.15}
+
+  StateEffects:
+    IdleFadeout:
+      when: audio['idle_for'] and audio['idle_for'] > 0.25
+      keep_state: true
+      effects:
+        dim: {end_value: 0, duration: 0.5}
+
+    IdleCoast:
+      when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
+      keep_state: true
+      effects:
+        pan: {end_value: random, duration: 5}
+        tilt: {end_value: random, duration: 5}
+
+    DeadCoast:
+      when: audio['dead_for'] and audio['dead_for'] > 2
+      keep_state: true
+      reset: ['dim']
+      effects:
+        dim: {end_value: 20, duration: 1}
+        pan: {end_value: random, duration: 8}
+        tilt: {end_value: random, duration: 8}
+        color: {start_value: random, duration: 8}
+        gobo: {start_value: random, duration: 8}
+
   Links:
     mid_1:
       Invert: [pan]
     mid_4: true
+
   Cooldown:
     pan: 0.75
     tilt: 0.75
@@ -19,8 +46,10 @@ back_1:
     strobe: 10
     dim: 0.125
 
+
 back_2:
   Program: back_1
+  StateEffects: back_1
   Links:
     mid_2: true
     mid_3:
@@ -40,8 +69,41 @@ front_1:
     - {trigger: frequency, bins: [[13, 23]], function: blue, range: scaled, threshold: 0.1, duration: 0.25}
     - {trigger: frequency, bins: [[0, 23]], function: uv, value: 255, threshold: -0.1, duration: 0.125}
     - {trigger: frequency, bins: [[0, 23]], function: uv, value: 0, threshold: 0.1}
+
+  StateEffects:
+    IdleFadeout:
+      when: audio['idle_for'] and audio['idle_for'] > 0.25
+      keep_state: true
+      effects:
+        red: {end_value: 0, duration: 0.5}
+        green: {end_value: 0, duration: 0.5}
+        blue: {end_value: 0, duration: 0.5}
+        white: {end_value: 0, duration: 0.5}
+        amber: {end_value: 0, duration: 0.5}
+        uv: {end_value: 255, duration: 0.5}
+
+    IdleCoast:
+      when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
+      keep_state: true
+      effects:
+        pan: {end_value: random, duration: 5}
+        tilt: {end_value: random, duration: 5}
+
+    DeadCoast:
+      when: audio['dead_for'] and audio['dead_for'] > 2
+      keep_state: true
+      reset: ['dim']
+      effects:
+        dim: {end_value: 20, duration: 1}
+        pan: {end_value: random, duration: 8}
+        tilt: {end_value: random, duration: 8}
+        red: {end_value: random, duration: 2}
+        green: {end_value: random, duration: 2}
+        blue: {end_value: random, duration: 2}
+
   Links:
     front_2: true
+
   Cooldown:
     pan: 0.75
     tilt: 0.75
