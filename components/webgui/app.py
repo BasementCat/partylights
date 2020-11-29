@@ -1,106 +1,86 @@
-import logging
-import textwrap
-import os
+from http.server import BaseHTTPRequestHandler
+import time
+import queue
 import json
-import threading
-
-from flask import (
-    Flask,
-    render_template_string,
-)
-from flask_threaded_sockets import Sockets
-from flask_bootstrap import Bootstrap
-
-from lib.pubsub import publish, subscribe
+import os
+import mimetypes
 
 
-logger = logging.getLogger(__name__)
+class AppClass(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith('/static'):
+            self.static()
+        else:
+            self.dispatch('GET')
+
+    def static(self):
+        fname = os.path.join(os.path.dirname(__file__), self.path.strip('/'))
+        if not os.path.exists(fname):
+            self.send_error(404)
+            return
+        with open(fname, 'rb') as fp:
+            out = fp.read()
+        content_type, _ = mimetypes.guess_type(fname)
+        self.send_response(200)
+        if content_type:
+            self.send_header('Content-type', content_type)
+        self.send_header('Content-length', str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+        self.wfile.flush()
 
 
-class WSWrapper:
-    def __init__(self, stop_event, open_sockets, ws, events=None):
-        self.stop_event = stop_event
-        self.open_sockets = open_sockets
-        self.ws = ws
-        self.events = events
-        self.s_ev = None
+    def dispatch(self, method):
+        fn = getattr(self, method + '_' + self.path.strip('/').replace('/', '_'), None)
+        if fn is None:
+            self.send_error(404)
+            return
+        fn()
 
-    @property
-    def alive(self):
-        return not (self.ws.closed or self.stop_event.is_set())
+    def _stream(self, key):
+        q = queue.Queue()
+        self.task.data_queues.append(q)
+        try:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            ts = time.time()
+            while time.time() - ts < 5:
+                try:
+                    data = q.get(timeout=0.25).get(key)
+                    if data:
+                        self.wfile.write(json.dumps(data).encode('utf-8') + b'\n')
+                        self.wfile.flush()
+                except queue.Empty:
+                    pass
+        finally:
+            self.task.data_queues.remove(q)
 
-    def __enter__(self):
-        self.s_ev = threading.Event()
-        self.open_sockets.append(self.s_ev)
-        return self
+    def GET_stream_audio(self):
+        self._stream('audio')
 
-    def __exit__(self, type_, value, traceback):
-        if value:
-            logger.error("Failure in websocket handler", exc_info=True)
+    def GET_stream_lights(self):
+        self._stream('rendered_state')
 
-        if not self.ws.closed:
-            self.ws.close()
-        if self.events:
-            self.events.unsubscribe()
-        self.s_ev.set()
-        if not self.stop_event.is_set():
-            self.open_sockets.remove(self.s_ev)
+    def GET_lights(self):
+        # TODO: do this a different way, handle errors
+        q = queue.Queue()
+        self.task.data_queues.append(q)
+        try:
+            data = q.get(timeout=5)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            out = {
+                'lights': {k: v.dump() for k, v in data['tasks']['lights'].lights.items()},
+                'state': {k: v.state for k, v in data['tasks']['lights'].lights.items()}
+            }
+            self.wfile.write(json.dumps(out).encode('utf-8'))
+            self.wfile.flush()
+        finally:
+            self.task.data_queues.remove(q)
 
-        return True
-
-
-def create_app(stop_event, open_sockets):
-    app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'shh it\'s a secret'
-    sockets = Sockets(app)
-    Bootstrap(app)
-
-    @app.route('/')
-    def index():
-        return render_template_string(textwrap.dedent(r'''
-            {% extends "bootstrap/base.html" %}
-            {% block title %}default{% endblock %}
-
-            {% block styles %}
-                {{ super() }}
-                <link rel="stylesheet" href="/static/style.css" />
-            {% endblock %}
-
-            {% block scripts %}
-                {{ super() }}
-                <script src="/main.js"></script>
-                <script>require('main');</script>
-            {% endblock %}
-
-            {% block navbar %}
-                <nav class="navbar navbar-default navbar-fixed-top">
-                    <div class="container">
-                        <div class="navbar-header">
-                            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-                                <span class="sr-only">Toggle navigation</span>
-                                <span class="icon-bar"></span>
-                                <span class="icon-bar"></span>
-                                <span class="icon-bar"></span>
-                            </button>
-                            <a class="navbar-brand" href="#" id="nav-title"></a>
-                        </div>
-                        <div id="navbar" class="navbar-collapse collapse">
-                            <ul class="nav navbar-nav" id="nav-left">
-                            </ul>
-                            <ul class="nav navbar-nav navbar-right" id="nav-right">
-                            </ul>
-                        </div><!--/.nav-collapse -->
-                    </div>
-                </nav>
-            {% endblock %}
-
-            {% block content %}
-                <div class="container-fluid" id="main"></div>
-            {% endblock %}
-        '''))
-
-    @app.route('/main.js')
-    def main_js():
+    def GET_js(self):
         out = ''
         rjs = ''
         basedir = os.path.join(os.path.dirname(__file__), 'static', 'js')
@@ -114,21 +94,22 @@ def create_app(stop_event, open_sockets):
                     else:
                         out += r"(window.pl_pre_mod=window.pl_pre_mod||{})['" + modname + "']=function(exports){\n" + fp.read() + "\n};\n"
             out += rjs
-        return out
+        out = out.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-type', 'text/javascript')
+        self.send_header('Content-length', str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+        self.wfile.flush()
 
-    # TODO: audio recv, lights send
+    def GET_(self):
+        with open(os.path.join(os.path.dirname(__file__), 'index.html'), 'rb') as fp:
+            out = fp.read()
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.send_header('Content-length', str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+        self.wfile.flush()
 
-    @sockets.route('/lights/recv')
-    def lights_recv(ws):
-        events = subscribe('light.state.*')
-        with WSWrapper(stop_event, open_sockets, ws, events=events) as wrap:
-            ws.send(json.dumps(['lights', {k: v.dump() for k, v in (publish('light.get.lights', returning=True) or {}).items()}]))
-            for k, v in (publish('light.get.state', returning=True) or {}).items():
-                ws.send(json.dumps(['state', k, v]))
-            while wrap.alive:
-                for ev in events:
-                    cmd, args = ev.unpack_name()
-                    if cmd == 'state':
-                        ws.send(json.dumps([cmd, args(1), ev.data]))
 
-    return app

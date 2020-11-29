@@ -157,12 +157,16 @@ class DMXLight(Light):
                         devices[l.device_name].setChannel(chan, val)
                     devices[l.device_name].render()
 
+        out = {}
         dev_data = {}
         for l in lights:
             if l.diff_state:
+                out.setdefault(l.name, {}).update(l.diff_state)
                 dev_data.setdefault(l.device_name, {}).update(l.get_dmx())
                 l.mark_sent()
         for dname, data in dev_data.items():
             for chan, val in data.items():
                 devices[dname].setChannel(chan, val)
             devices[dname].render()
+
+        return out

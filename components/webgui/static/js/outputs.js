@@ -214,6 +214,49 @@ class MovingHeadOutput extends Output {
     }
 }
 
+class AudioGraphOutput {
+    constructor(dest) {
+        this.dest = dest;
+        this.container = util.make_el('div', null, ['audio_graph']);
+        dest.appendChild(this.container);
+        // TODO: get bins from server
+        this.bins = 24;
+        this.empty_data = [];
+        for (var i = 0; i < this.bins; i++) {
+            this.empty_data.push([i, 0]);
+        }
+        this.data = this.empty_data;
+        this.plot = $.plot(this.container, [this.data, {}], {
+            series: {
+                lines: { show: true },
+                points: { show: true },
+                color: 'purple',
+            },
+            yaxis: {
+                min: 0,
+                max: 2,
+            }
+        });
+    }
+
+    update(data) {
+        if (data) {
+            this.data = [];
+            for (var i = 0; i < this.bins; i++) {
+                this.data.push([i, data[i]]);
+            }
+        } else {
+            this.data = this.empty_data;
+        }
+        this.plot.setData([this.data]);
+        this.plot.draw();
+    }
+
+    destroy() {
+        this.dest.removeChild(this.container);
+    }
+}
+
 class Light {
     constructor(light_data) {
         this.name = light_data.Name;
@@ -279,4 +322,5 @@ return {
     'Light': Light,
     'TableOutput': TableOutput,
     'MovingHeadOutput': MovingHeadOutput,
+    'AudioGraphOutput': AudioGraphOutput,
 }

@@ -1,7 +1,6 @@
 let util = require('lib/util');
-let WS = require('lib/websocket');
-let clientid = require('lib/clientid');
 let outputs = require('outputs');
+let Stream = require('lib/stream');
 
 let container = document.getElementById('main');
 
@@ -16,24 +15,36 @@ class Page {
 class MonitorPage extends Page {
     constructor() {
         super();
+        this.audio_graph = null;
         this.raw_lights = null;
         this.lights = null;
-        this.ws = null;
+        this.l_stream = null;
+        this.a_stream = null;
     }
 
     render() {
-        this.ws = new WS('/lights/recv?clientid=' + clientid());
-        this.ws.on('decoded_message', this._handle_message.bind(this));
+        this.audio_graph = new outputs.AudioGraphOutput(container);
+        this.a_stream = new Stream('audio', this._handle_audio.bind(this));
+        $.get('/lights', function(d) {
+            this._handle_lights(d.lights);
+            this._handle_state(d.state);
+            this.l_stream = new Stream('lights', this._handle_state.bind(this));
+        }.bind(this));
     }
 
-    _handle_message(data) {
-        if (data[0] === 'lights') {
-            console.log(data[1]);
-            this.raw_lights = data[1];
-            this._really_render();
-        } else if (data[0] === 'state') {
-            this.lights[data[1]] && (this.lights[data[1]].state = data[2]);
+    _handle_lights(data) {
+        this.raw_lights = data;
+        this._really_render();
+    }
+
+    _handle_state(data) {
+        for (var k in data) {
+            if (this.lights[k]) this.lights[k].state = data[k];
         }
+    }
+
+    _handle_audio(data) {
+        this.audio_graph.update(data)
     }
 
     _really_render() {
@@ -49,7 +60,8 @@ class MonitorPage extends Page {
     }
 
     unrender() {
-        this.ws.close();
+        this.l_stream.stop();
+        this.a_stream.stop();
         this.lights = null;
         super.unrender();
     }

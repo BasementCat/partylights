@@ -10,18 +10,11 @@ DMXDevices:
 LightTypes: "@types.yaml"
 Lights: "@lights.yaml"
 Mapping: "@mapping.yaml"
-LightServer:
-  Bind:
-    Host: '0.0.0.0'
-    Port: 37730
 Capture:
   Method: pyaudio
   SampleRate: 44100
   FPS: 60
   Device: 99
-  Bind:
-    Host: '0.0.0.0'
-    Port: 37731
 Processors:
   Smoothing:
     RollingHistory: 2
@@ -29,10 +22,6 @@ Processors:
     MinVolumeThreshold: 1e-7
   Idle:
     Threshold: 0.07
-Servers:
-  AudioCapture:
-    Host: '127.0.0.1'
-    Port: 37731
-  LightServer:
-    Host: '127.0.0.1'
-    Port: 37730
+Network:
+  Host: "0.0.0.0"
+  Port: 37737
