@@ -256,15 +256,14 @@ class MapperTask(Task):
                 self.prop_last_update[light_name][directive['function']] = time.perf_counter()
 
             if state:
-                light_data = data.setdefault('light_state', {}).setdefault('mapper', {})
-                light_data.setdefault(light_name, {}).update(state)
+                self.tasks['lights'].set_state('mapper', light_name, state, suppress_errors=True)
                 for linked_name, link_config in (mapping.get('Links') or {}).items():
                     linked_state = state.copy()
                     if link_config is not True:
                         for prop in link_config.get('Invert'):
                             if prop in linked_state:
                                 linked_state[prop] = 255 - linked_state[prop]
-                    light_data.setdefault(linked_name, {}).update(linked_state)
+                    self.tasks['lights'].set_state('mapper', linked_name, linked_state, suppress_errors=True)
 
 
 # back_1:

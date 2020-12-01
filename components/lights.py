@@ -11,49 +11,50 @@ from lib.light.dmx import DMXDevice
 logger = logging.getLogger(__name__)
 
 
-# class Effect:
-#     def __init__(self, sender, light_name, function, start_value, end_value, duration, speed_config=None):
-#         self.id = str(uuid.uuid4())
-#         self.sender = sender
-#         self.light_name = light_name
-#         self.function = function
-#         self.start_value = start_value
-#         self.end_value = end_value
-#         self.duration = duration
-#         self.speed_config = speed_config
+class Effect:
+    def __init__(self, sender, light_name, function, start_value, end_value, duration, speed_config=None):
+        self.id = str(uuid.uuid4())
+        self.sender = sender
+        self.light_name = light_name
+        self.function = function
+        self.start_value = start_value
+        self.end_value = end_value
+        self.duration = duration
+        self.speed_config = speed_config
 
-#         self.start_time = time.perf_counter()
+        self.is_new = True
+        self.start_time = time.perf_counter()
 
-#     @property
-#     def speed(self):
-#         if self.speed_config is None:
-#             return None
-#         # speed: [25, 1]
-#         slowest, fastest = self.speed_config
-#         full_move_speed = 255 - min(255, max(0, 255 * (self.duration / fastest)))
-#         return int(full_move_speed * (abs(self.end_value - self.start_value) / 255))
+    @property
+    def speed(self):
+        if self.speed_config is None:
+            return None
+        # speed: [25, 1]
+        slowest, fastest = self.speed_config
+        full_move_speed = 255 - min(255, max(0, 255 * (self.duration / fastest)))
+        return int(full_move_speed * (abs(self.end_value - self.start_value) / 255))
 
-#     @property
-#     def value(self):
-#         return int(min(self.end_value, ((self.end_value - self.start_value) * ((time.perf_counter() - self.start_time) / self.duration)) + self.start_value))
+    @property
+    def value(self):
+        return int(min(self.end_value, ((self.end_value - self.start_value) * ((time.perf_counter() - self.start_time) / self.duration)) + self.start_value))
 
-#     @property
-#     def done(self):
-#         return (time.perf_counter() - self.start_time) >= self.duration
+    @property
+    def done(self):
+        return (time.perf_counter() - self.start_time) >= self.duration
 
-#     @property
-#     def serialized(self):
-#         return {
-#             'sender': self.sender,
-#             'light_name': self.light_name,
-#             'function': self.function,
-#             'start_value': self.start_value,
-#             'end_value': self.end_value,
-#             'duration': self.duration,
-#             'speed': self.speed,
-#             'value': self.value,
-#             'done': self.done,
-#         }
+    @property
+    def serialized(self):
+        return {
+            'sender': self.sender,
+            'light_name': self.light_name,
+            'function': self.function,
+            'start_value': self.start_value,
+            'end_value': self.end_value,
+            'duration': self.duration,
+            'speed': self.speed,
+            'value': self.value,
+            'done': self.done,
+        }
 
 # Effect: transition a property from a starting (or current) value to ending (or current) over a period of time
 # Not exclusive but does prevent setting that property while the effect is active
@@ -73,7 +74,10 @@ class LightOutputTask(Task):
     def setup(self):
         self.lights = {}
         self.exclusive = {}
-        # self.effects = {}
+        self.effects = {}
+
+        self.state_queue = []
+
         for name, lconfig in self.config.get('Lights', {}).items():
             if name in self.lights:
                 raise RuntimeError(f"The light {name} is defined more than once, somehow")
@@ -85,51 +89,67 @@ class LightOutputTask(Task):
         if not self.dmx_devices.get('default'):
             raise RuntimeError("The default DMX device is not configured")
 
-    def _set_state(self, sender, light, state):
-        light = light if hasattr(light, 'set_state') else self.lights[light]
-        state = {k: v for k, v in state.items() if self.exclusive.get((light.name, k)) in (None, sender)}
-        if state:
-            light.set_state(**state)
+    def set_state(self, sender, light_or_name, state, suppress_errors=False):
+        try:
+            if isinstance(light_or_name, str):
+                light = self.lights.get(light_or_name)
+                if not light:
+                    raise ValueError(f"No such light: {light_or_name}")
+            else:
+                light = light_or_name
 
-    # def _create_effect(self, sender, data):
-    #     light_name = data.get('light_name')
-    #     if not light_name or light_name not in self.lights:
-    #         raise ValueError(f"Invalid light name: {light_name}")
-    #     light = self.lights[light_name]
-    #     function = data.get('function')
-    #     if not function or function not in light.functions:
-    #         raise ValueError(f"Invalid function: {function}")
+            state = {k: v for k, v in state.items() if self.exclusive.get((light.name, k)) in (None, sender)}
+            if state:
+                self.state_queue.append((light.name, state))
+            return state
+        except (ValueError, RuntimeError) as e:
+            if suppress_errors:
+                logger.error("Can't set state for %s:%s: %s: %s\n%s", sender, light_or_name, e.__class__.__name__, str(e), state)
+            else:
+                raise
 
-    #     if self.exclusive.get((light_name, function)) not in (sender, None):
-    #         # Someone else is exclusive for this light and/or function, so bail
-    #         return None, None
+    def create_effect(self, sender, light_name, data, override=False):
+        if not light_name or light_name not in self.lights:
+            raise ValueError(f"Invalid light name: {light_name}")
+        light = self.lights[light_name]
+        function = data.get('function')
+        if not function or function not in light.functions:
+            raise ValueError(f"Invalid function {function} for light {light_name}")
+        if 'duration' not in data:
+            raise ValueError("A duration is required")
 
-    #     to_cancel = None
-    #     for eff in self.effects.values():
-    #         if eff.light_name == light_name and eff.function == function:
-    #             if eff.sender != sender:
-    #                 # Someone else already has an effect for this light/function
-    #                 return None, None
-    #             else:
-    #                 # This sender has an effect - cancel it
-    #                 to_cancel = eff
-    #                 break
+        if self.exclusive.get((light_name, function)) not in (sender, None):
+            # Someone else is exclusive for this light and/or function, so bail
+            raise RuntimeError(f"Another sender is exclusive for {light_name}/{function}")
 
-    #     start_value = data.get('start_value', light.state[function])
-    #     end_value = data.get('end_value', light.state[function])
-    #     if 'duration' not in data:
-    #         raise ValueError("A duration is required")
-    #     speed_config = light.functions[function].get('speed')
-    #     # def __init__(self, sender, light_name, function, start_value, end_value, duration, speed_config=None):
-    #     return to_cancel, Effect(
-    #         sender,
-    #         light_name,
-    #         function,
-    #         start_value,
-    #         end_value,
-    #         data['duration'],
-    #         speed_config=speed_config,
-    #     )
+        to_cancel = None
+        for eff in self.effects.values():
+            if eff.light_name == light_name and eff.function == function:
+                if eff.sender != sender:
+                    # Someone else already has an effect for this light/function
+                    raise RuntimeError(f"Another sender has an active effect for {light_name}/{function}")
+                elif override:
+                    # This sender has an effect - cancel it
+                    self.cancel_effect(effect=eff)
+                    break
+                else:
+                     # The sender is not overriding their own effect, do not apply, but do not raise an error
+                     return
+
+        start_value = data.get('start_value', light.state[function])
+        end_value = data.get('end_value', light.state[function])
+        speed_config = light.functions[function].get('speed')
+        eff = Effect(
+            sender,
+            light_name,
+            function,
+            start_value,
+            end_value,
+            data['duration'],
+            speed_config=speed_config,
+        )
+        self.effect_queue.append((sender, light.name, eff))
+        return eff
 
     # def _cancel_effect(self, effect=None, light=None, function=None, explicit=False, keep_state=False, because_done=False):
     #     if not (effect or light):
@@ -164,20 +184,25 @@ class LightOutputTask(Task):
     #             self._set_state(sender, l, s)
 
     def run(self, data):
-        # # Run effects first
-        # eff_state = {}
-        # for eff_id, eff in list(self.effects.items()):
-        #     if eff.speed is None:
-        #         eff_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})[eff.function] = eff.value
-        #     if eff.done:
-        #         self._cancel_effect(effect=eff, because_done=True)
-        # for sender, lights in eff_state.items():
-        #     for l, s in lights.items():
-        #         self._set_state(sender, l, s)
+        # Run effects first
+        for eff_id, eff in list(self.effects.items()):
+            if eff.is_new:
+                # For new effects, set the initial value (unless speed is a factor then set the final value)
+                eff.is_new = False
+                speed = e.speed
+                if speed is None:
+                    self.set_state(eff.sender, eff.light_name, {eff.function: eff.start_value}, suppress_errors=True)
+                else:
+                    self.set_state(eff.sender, eff.light_name, {'speed': speed, eff.function: eff.end_value}, suppress_errors=True)
+            else:
+                if eff.speed is None:
+                    self.set_state(eff.sender, eff.light_name, {eff.function: eff.value}, suppress_errors=True)
+                if eff.done:
+                    self.cancel_effect(effect=eff, because_done=True)
 
-        for sender, light_data in data.get('light_state', {}).items():
-            for light_name, state in light_data.items():
-                self._set_state(sender, light_name, state)
+        for light_name, state in self.state_queue:
+            self.lights[light_name].set_state(**state)
+        self.state_queue = []
 
         #         elif cmd == 'exclusive':
         #             if not ev.sender:
@@ -211,45 +236,6 @@ class LightOutputTask(Task):
         #                         self._cancel_effect(light=l, function=f)
         #         elif cmd == 'effect':
         #             action = args(1)
-        #             if action == 'start':
-        #                 try:
-        #                     effects_to_cancel = []
-        #                     new_effects = []
-        #                     out = []
-        #                     for effect_config in ev.data.get('effects') or []:
-        #                         to_cancel, new_effect = self._create_effect(ev.sender, effect_config)
-        #                         if to_cancel:
-        #                             effects_to_cancel.append(to_cancel)
-        #                         if new_effect:
-        #                             new_effects.append(new_effect)
-        #                         out.append(new_effect)
-
-        #                     new_state = {}
-        #                     for e in effects_to_cancel:
-        #                         self._cancel_effect(effect=e)
-
-        #                     for e in new_effects:
-        #                         publish('light.effect.started.' + e.id, {'effect': e})
-        #                         self.effects[e.id] = e
-        #                         speed = e.speed
-        #                         if speed is not None:
-        #                             new_state.setdefault(e.light_name, {})['speed'] = speed
-        #                             new_state.setdefault(e.light_name, {})[e.function] = e.end_value
-        #                         else:
-        #                             new_state.setdefault(e.light_name, {})[e.function] = e.start_value
-
-        #                     for l, s in new_state.items():
-        #                         self._set_state(ev.sender, l, s)
-
-        #                     ev.returning((
-        #                         subscribe(*(f'light.effect.*.{e.id}' for e in new_effects)),
-        #                         out
-        #                     ))
-        #                 except ValueError as e:
-        #                     logger.warning("Failed to create effects: %s", str(e))
-        #                     ev.returning((None, False))
-        #                 finally:
-        #                     ev.returning((None, None))
         #             elif action == 'cancel':
         #                 effect = self.effects.get(ev.data.get('effect'))
         #                 if not effect:
