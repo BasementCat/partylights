@@ -38,20 +38,21 @@ def main(args):
 
     fps = FPSCounter('All')
 
-    tasks = {
-        'audio': AudioCaptureTask(config),
-        'mapper': MapperTask(config),
-        'lights': LightOutputTask(config),
-        'webgui': WebGUITask(config),
-        'network': NetworkTask(config),
-    }
+    # Initialize tasks first so that the dict can be passed to all tasks, giving them access to other tasks
+    tasks = {}
+    tasks['audio'] = AudioCaptureTask(tasks, config)
+    tasks['mapper'] = MapperTask(tasks, config)
+    tasks['lights'] = LightOutputTask(tasks, config)
+    tasks['webgui'] = WebGUITask(tasks, config)
+    tasks['network'] = NetworkTask(tasks, config)
+
     try:
         for task in tasks.values():
             task.setup()
 
         while not stop_event.is_set():
             with fps:
-                data = {'tasks': tasks}
+                data = {}
                 for t in tasks.values():
                     try:
                         t.run(data)

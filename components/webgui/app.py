@@ -64,21 +64,15 @@ class AppClass(BaseHTTPRequestHandler):
 
     def GET_lights(self):
         # TODO: do this a different way, handle errors
-        q = queue.Queue()
-        self.task.data_queues.append(q)
-        try:
-            data = q.get(timeout=5)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            out = {
-                'lights': {k: v.dump() for k, v in data['tasks']['lights'].lights.items()},
-                'state': {k: v.state for k, v in data['tasks']['lights'].lights.items()}
-            }
-            self.wfile.write(json.dumps(out).encode('utf-8'))
-            self.wfile.flush()
-        finally:
-            self.task.data_queues.remove(q)
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        out = {
+            'lights': {k: v.dump() for k, v in self.task.tasks['lights'].lights.items()},
+            'state': {k: v.state for k, v in self.task.tasks['lights'].lights.items()}
+        }
+        self.wfile.write(json.dumps(out).encode('utf-8'))
+        self.wfile.flush()
 
     def GET_js(self):
         out = ''
