@@ -160,9 +160,26 @@ class MapperTask(Task):
     #                     # Time to unapply
     #                     e.unapply()
 
+    def _set_state_or_create_effect(self, durations, light_name, state):
+        if state:
+            state = state.copy()
+            for k, v in list(state.items()):
+                if k in durations:
+                    state.pop(k)
+                    effect = {
+                        'function': k,
+                        'end_value': v,
+                        'duration': durations[k][0],
+                        'keep_state': durations[k][1],
+                    }
+                    self.tasks['lights'].create_effect('mapper', light_name, effect, suppress_errors=True)
+            if state:
+                self.tasks['lights'].set_state('mapper', light_name, state, suppress_errors=True)
+
     def _run_mapping(self, data):
         for light_name, mapping in self.mapping.items():
             state = {}
+            durations = {}
             program = mapping.get('Program')
             if not program:
                 continue
@@ -251,19 +268,20 @@ class MapperTask(Task):
 
                 value = int(min(255, max(0, value)))
 
-                # print(light_name, directive['function'], value)
+                if directive.get('duration'):
+                    durations[directive['function']] = (directive['duration'], directive.get('keep_state', True))
                 state[directive['function']] = value
                 self.prop_last_update[light_name][directive['function']] = time.perf_counter()
 
             if state:
-                self.tasks['lights'].set_state('mapper', light_name, state, suppress_errors=True)
+                self._set_state_or_create_effect(durations, light_name, state)
                 for linked_name, link_config in (mapping.get('Links') or {}).items():
                     linked_state = state.copy()
                     if link_config is not True:
                         for prop in link_config.get('Invert'):
                             if prop in linked_state:
                                 linked_state[prop] = 255 - linked_state[prop]
-                    self.tasks['lights'].set_state('mapper', linked_name, linked_state, suppress_errors=True)
+                    self._set_state_or_create_effect(durations, linked_name, linked_state)
 
 
 # back_1:
