@@ -54,6 +54,19 @@ back_2:
       Invert: [pan]
   Cooldown: back_1
 
+mid_1:
+  StateEffects: back_1
+  Cooldown: back_1
+mid_2:
+  StateEffects: back_1
+  Cooldown: back_1
+mid_3:
+  StateEffects: back_1
+  Cooldown: back_1
+mid_4:
+  StateEffects: back_1
+  Cooldown: back_1
+
 front_1:
   Program:
     - {trigger: onset, function: pan, value: random, range: scaled, scale_src: frequency}
@@ -99,6 +112,10 @@ front_1:
 
   Links:
     front_2: true
+
+front_2:
+  StateEffects: front_1
+  Cooldown: front_1
 
   Cooldown:
     pan: 0.75

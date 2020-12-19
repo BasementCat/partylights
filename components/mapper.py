@@ -133,7 +133,7 @@ class MapperTask(Task):
             self.state_effects[light] = list(sorted(self.state_effects[light], key=lambda v: v.priority, reverse=True))
 
     def _run_effects(self, data):
-        # TODO: copy effects to linked
+        # TODO: Props update too quickly, not respecting prop_last_update
 
         for light, s_eff_set in self.state_effects.items():
             prop_last_update = self.prop_last_update.setdefault(light, {})
