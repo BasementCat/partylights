@@ -15,7 +15,7 @@ back_1:
         dim: {end_value: 0, duration: 0.5}
 
     IdleCoast:
-      when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
+      when: audio['audio_v_sum'] and time.perf_counter() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
       reset: []
       effects:
         pan: {end_value: random, duration: 5}
@@ -80,7 +80,7 @@ front_1:
         uv: {end_value: 255, duration: 0.5}
 
     IdleCoast:
-      when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
+      when: audio['audio_v_sum'] and time.perf_counter() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
       reset: []
       effects:
         pan: {end_value: random, duration: 5}

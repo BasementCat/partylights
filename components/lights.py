@@ -222,6 +222,7 @@ class LightOutputTask(Task):
     def run(self, data):
         # Run effects first
         for eff_id, eff in list(self.effects.items()):
+            data.setdefault('effects_data', {})[eff_id] = eff.serialized
             if eff.is_new:
                 # For new effects, set the initial value (unless speed is a factor then set the final value)
                 eff.is_new = False

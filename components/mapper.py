@@ -2,6 +2,7 @@ import random
 import logging
 import json
 import time
+import uuid
 
 from lib.task import Task
 
@@ -37,6 +38,11 @@ class StateEffect:
         self.sub_effects = {}
 
         self.apply()
+
+    @property
+    def affected_functions(self):
+        for eff in self.sub_effects.values():
+            yield eff.function
 
     def apply(self):
         for fn, props in self.effects.items():
@@ -127,16 +133,15 @@ class MapperTask(Task):
             self.state_effects[light] = list(sorted(self.state_effects[light], key=lambda v: v.priority, reverse=True))
 
     def _run_effects(self, data):
-        # TODO: somehow state effects need to update prop_last_update
-        # TODO: dim isn't being reset?
         # TODO: copy effects to linked
 
         for light, s_eff_set in self.state_effects.items():
+            prop_last_update = self.prop_last_update.setdefault(light, {})
             # Find the state effect that's applicable to this light right now
             applied_effect = self.applied_state_effects.get(light)
             applicable_effect = None
             for eff in s_eff_set:
-                if eff.get_is_applicable(data, self.prop_last_update):
+                if eff.get_is_applicable(data, prop_last_update):
                     if applied_effect and applied_effect.priority > eff.priority:
                         # Ignore lower priority effects
                         continue
@@ -147,6 +152,7 @@ class MapperTask(Task):
             if applicable_effect and applied_effect and applicable_effect.priority > applied_effect.priority:
                 # An applicable effect has a higher priority than the applied effect
                 # Cancel the applied effect, but don't reset state
+                logger.debug("Unapply due to priority: %s", applied_effect)
                 orig_state, reset = applied_effect.unapply(reset_state=False)
                 applied_effect = None
                 del self.applied_state_effects[light]
@@ -157,9 +163,11 @@ class MapperTask(Task):
                     # and if it was higher, applied would have been unapplied above
                     # If the effect is done, reapply it
                     if not applied_effect.check():
+                        logger.debug("Reapply still applicable %s", applied_effect)
                         applied_effect.apply()
                 else:
                     # No effect is applicable, so unapply
+                    logger.debug("Unapply - done %s", applied_effect)
                     applied_effect.unapply()
                     applied_effect = None
                     del self.applied_state_effects[light]
@@ -171,6 +179,11 @@ class MapperTask(Task):
                     orig_state,
                     reset
                 )
+                logger.debug("Apply new %s", applied_effect)
+
+            if applied_effect:
+                for p in applied_effect.affected_functions:
+                    prop_last_update[p] = time.perf_counter()
 
     def _set_state_or_create_effect(self, durations, light_name, state):
         if state:
