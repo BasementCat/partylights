@@ -44,8 +44,12 @@ class StateEffect:
         for eff in self.sub_effects.values():
             yield eff.function
 
-    def apply(self):
+    def apply(self, prop_last_update=None, cooldown=None):
         for fn, props in self.effects.items():
+            last_updated = (prop_last_update or {}).get(fn)
+            prop_cooldown = (cooldown or {}).get(fn)
+            if last_updated is not None and prop_cooldown is not None and time.perf_counter() - last_updated < prop_cooldown:
+                continue
             self._mk_effect(fn, **props)
 
     def _mk_effect(self, fn, **props):
@@ -133,8 +137,6 @@ class MapperTask(Task):
             self.state_effects[light] = list(sorted(self.state_effects[light], key=lambda v: v.priority, reverse=True))
 
     def _run_effects(self, data):
-        # TODO: Props update too quickly, not respecting prop_last_update
-
         for light, s_eff_set in self.state_effects.items():
             prop_last_update = self.prop_last_update.setdefault(light, {})
             # Find the state effect that's applicable to this light right now
@@ -164,7 +166,7 @@ class MapperTask(Task):
                     # If the effect is done, reapply it
                     if not applied_effect.check():
                         logger.debug("Reapply still applicable %s", applied_effect)
-                        applied_effect.apply()
+                        applied_effect.apply(prop_last_update, self.mapping.get(light, {}).get('Cooldown', {}))
                 else:
                     # No effect is applicable, so unapply
                     logger.debug("Unapply - done %s", applied_effect)
