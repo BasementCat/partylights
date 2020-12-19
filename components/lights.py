@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Effect:
-    def __init__(self, sender, light_name, function, start_value, end_value, duration, keep_state=False, speed_config=None):
+    def __init__(self, sender, light_name, function, start_value, end_value, duration, keep_state=False, speed_config=None, orig_speed=None):
         self.id = str(uuid.uuid4())
         self.sender = sender
         self.light_name = light_name
@@ -22,8 +22,10 @@ class Effect:
         self.duration = duration
         self.speed_config = speed_config
         self.keep_state = keep_state
+        self.orig_speed = orig_speed
 
         self.is_new = True
+        self.is_cancelled = False
         self.start_time = time.perf_counter()
 
     @property
@@ -41,7 +43,7 @@ class Effect:
 
     @property
     def done(self):
-        return (time.perf_counter() - self.start_time) >= self.duration
+        return self.is_cancelled or (time.perf_counter() - self.start_time) >= self.duration
 
     @property
     def serialized(self):
@@ -109,6 +111,22 @@ class LightOutputTask(Task):
             else:
                 raise
 
+    def get_state(self, light_or_name, suppress_errors=False):
+        try:
+            if isinstance(light_or_name, str):
+                light = self.lights.get(light_or_name)
+                if not light:
+                    raise ValueError(f"No such light: {light_or_name}")
+            else:
+                light = light_or_name
+
+            return light.state.copy()
+        except (ValueError, RuntimeError) as e:
+            if suppress_errors:
+                logger.error("Can't get state for %s: %s: %s", light_or_name, e.__class__.__name__, str(e))
+            else:
+                raise
+
     def create_effect(self, sender, light_name, data, override=False, suppress_errors=False):
         try:
             if not light_name or light_name not in self.lights:
@@ -150,6 +168,7 @@ class LightOutputTask(Task):
                 data['duration'],
                 speed_config=speed_config,
                 keep_state=data.get('keep_state', False),
+                orig_speed=light.state.get('speed') if speed_config else None,
             )
             self.effects[eff.id] = eff
             return eff
@@ -177,8 +196,12 @@ class LightOutputTask(Task):
 
         new_state = {}
         for eff in effects:
+            eff.is_cancelled = True
             if not eff.keep_state:
                 new_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})[eff.function] = eff.start_value
+            # Always reset speed
+            if eff.orig_speed is not None:
+                new_state.setdefault(eff.sender, {}).setdefault(eff.light_name, {})['speed'] = eff.orig_speed
             del self.effects[eff.id]
         for sender, lights in new_state.items():
             for l, s in lights.items():
