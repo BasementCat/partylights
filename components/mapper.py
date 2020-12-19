@@ -10,51 +10,52 @@ logger = logging.getLogger(__name__)
 
 
 class StateEffect:
-    def __init__(self, mapper, index, name, light_name, when, effects, keep_state=False, reset=None, priority=None):
-        self.mapper = mapper
-        self.name = name
-        self.light_name = light_name
-        self.when = when
-        self.effects = effects
-        self.keep_state = keep_state
-        self.reset = list(self.effects.keys()) if reset is None else reset
-        self.priority = index if priority is None else priority
+    @classmethod
+    def define(cls, mapper, index, name, when, effects, reset=None, priority=None):
+        class StateEffectImpl(cls):
+            pass
+        StateEffectImpl.mapper = mapper
+        StateEffectImpl.name = name
+        StateEffectImpl.when = when
+        StateEffectImpl.effects = effects
+        StateEffectImpl.reset = list(effects.keys()) if reset is None else reset
+        StateEffectImpl.priority = index if priority is None else priority
+        return StateEffectImpl
 
-        # TODO: parse effects, when start/end value is random, pick a random value, should scale as well
-
-        self.orig_state = None
-        self.is_applied = False
-        self.sub_effects = {}
+    @classmethod
+    def get_is_applicable(cls, audio, prop_last_update):
+        return eval(cls.when)
 
     def __str__(self):
-        return f"StateEffect {self.name}#{self.priority} on {self.light_name}" + (' [applied]' if self.is_applied else '')
+        return f"StateEffect {self.name}#{self.priority} on {self.light_name}"
 
-    def get_is_applicable(self, audio, prop_last_update):
-        return eval(self.when)
+    def __init__(self, light_name, orig_state=None, addl_reset=None):
+        self.id = str(uuid.uuid4())
+        self.light_name = light_name
+        self.orig_state = orig_state or self.mapper.tasks['lights'].get_state(self.light_name)
+        self.addl_reset = addl_reset or []
+        self.sub_effects = {}
 
-    def apply(self, orig_state=None):
-        self.is_applied = True
+        self.apply()
 
-        if self.orig_state is None:
-            self.orig_state = orig_state or self.mapper.tasks['lights'].get_state(self.light_name)
+    def apply(self):
+        for fn, props in self.effects.items():
+            self._mk_effect(fn, **props)
 
-        def mk_effect(e):
-            args = dict(e[1])
-            for k in ('start_value', 'end_value'):
-                if args.get(k) == 'random':
-                    args[k] = random.randint(0, 255)
+    def _mk_effect(self, fn, **props):
+        for k in ('start_value', 'end_value'):
+            if props.get(k) == 'random':
+                # TODO: parse effects, when start/end value is random, pick a random value from enum if present, should scale as well
+                props[k] = random.randint(0, 255)
 
-            eff = self.mapper.tasks['lights'].create_effect(
-                'mapper',
-                self.light_name,
-                dict(args, function=e[0], keep_state=True),
-                suppress_errors=True
-            )
-            if eff:
-                self.sub_effects[eff.id] = eff
-
-        for item in self.effects.items():
-            mk_effect(item)
+        eff = self.mapper.tasks['lights'].create_effect(
+            'mapper',
+            self.light_name,
+            dict(props, function=fn, keep_state=True),
+            suppress_errors=True
+        )
+        if eff:
+            self.sub_effects[eff.id] = eff
 
     def check(self):
         for id, eff in list(self.sub_effects.items()):
@@ -63,24 +64,21 @@ class StateEffect:
         return bool(self.sub_effects)
 
     def unapply(self, reset_state=True):
-        self.is_applied = False
-        out = None
         for eff in self.sub_effects.values():
             self.mapper.tasks['lights'].cancel_effect(eff)
-        self.sub_effects = {}
         if reset_state:
             if self.orig_state:
-                out = self.orig_state
-                new_state = dict(filter(lambda v: v[1] is not None, ((k, self.orig_state.get(k)) for k in self.reset)))
+                to_reset = set(self.reset + self.addl_reset)
+                new_state = dict(filter(lambda v: v[1] is not None, ((k, self.orig_state.get(k)) for k in to_reset)))
                 if new_state:
                     self.mapper.tasks['lights'].set_state('mapper', self.light_name, new_state, suppress_errors=True)
-        self.orig_state = None
-        return out
+        return self.orig_state, self.reset + self.addl_reset
 
 
 class MapperTask(Task):
     def setup(self):
         self.state_effects = {}
+        self.applied_state_effects = {}
         self._parse_mapping(self.config)
 
         self.prop_last_update = {}
@@ -120,11 +118,10 @@ class MapperTask(Task):
 
             self.state_effects.setdefault(light, [])
             for i, (k, v) in enumerate(data['StateEffects'].items()):
-                self.state_effects[light].append(StateEffect(
+                self.state_effects[light].append(StateEffect.define(
                     self,
                     i,
                     k,
-                    light,
                     **v
                 ))
             self.state_effects[light] = list(sorted(self.state_effects[light], key=lambda v: v.priority, reverse=True))
@@ -133,41 +130,47 @@ class MapperTask(Task):
         # TODO: somehow state effects need to update prop_last_update
         # TODO: dim isn't being reset?
         # TODO: copy effects to linked
-        for s_eff_set in self.state_effects.values():
-            first_applicable = None
-            applied_effect = None
+
+        for light, s_eff_set in self.state_effects.items():
+            # Find the state effect that's applicable to this light right now
+            applied_effect = self.applied_state_effects.get(light)
+            applicable_effect = None
             for eff in s_eff_set:
-                if first_applicable is None and eff.get_is_applicable(data, self.prop_last_update):
-                    first_applicable = eff
-                if applied_effect is None and eff.is_applied:
-                    applied_effect = eff
-                if first_applicable and applied_effect:
+                if eff.get_is_applicable(data, self.prop_last_update):
+                    if applied_effect and applied_effect.priority > eff.priority:
+                        # Ignore lower priority effects
+                        continue
+                    applicable_effect = eff
                     break
 
-            orig_state = None
-            if applied_effect:
-                # An effect is already applied
-                if applied_effect.check() and applied_effect.get_is_applicable(data, self.prop_last_update):
-                    if not first_applicable or first_applicable is applied_effect:
-                        continue
-                else:
-                    # The effect is done, so it likely should be ended
-                    if applied_effect is first_applicable:
-                        # Still applicable - reapply
-                        logger.debug("Reapplying still applicable %s", applied_effect)
-                        applied_effect.apply()
-                        continue
-                    # Not applicable, so end
-                    logger.debug("Unapplying non-applicable %s", applied_effect)
-                    orig_state = applied_effect.unapply(reset_state=not bool(first_applicable))
-                    applied_effect = None
+            orig_state = reset = None
+            if applicable_effect and applied_effect and applicable_effect.priority > applied_effect.priority:
+                # An applicable effect has a higher priority than the applied effect
+                # Cancel the applied effect, but don't reset state
+                orig_state, reset = applied_effect.unapply(reset_state=False)
+                applied_effect = None
+                del self.applied_state_effects[light]
 
-            if first_applicable:
-                if applied_effect:
-                    logger.debug("Cancelling %s", applied_effect)
-                    orig_state = applied_effect.unapply(reset_state=False)
-                logger.debug("Applying new %s", first_applicable)
-                first_applicable.apply(orig_state)
+            if applied_effect:
+                if applicable_effect:
+                    # Applicable effect must be the applied effect, if it was lower pri it was ignored
+                    # and if it was higher, applied would have been unapplied above
+                    # If the effect is done, reapply it
+                    if not applied_effect.check():
+                        applied_effect.apply()
+                else:
+                    # No effect is applicable, so unapply
+                    applied_effect.unapply()
+                    applied_effect = None
+                    del self.applied_state_effects[light]
+
+            if applicable_effect and not applied_effect:
+                # Apply this new effect
+                self.applied_state_effects[light] = applied_effect = applicable_effect(
+                    light,
+                    orig_state,
+                    reset
+                )
 
     def _set_state_or_create_effect(self, durations, light_name, state):
         if state:

@@ -111,6 +111,16 @@ class LightOutputTask(Task):
             else:
                 raise
 
+    def _render_state_queue(self, light=None, clear=False):
+        out = {}
+        for light_, state in self.state_queue:
+            out.setdefault(light_, {}).update(state)
+        if clear and not light:
+            self.state_queue = []
+        if light:
+            return out.get(light, {})
+        return out
+
     def get_state(self, light_or_name, suppress_errors=False):
         try:
             if isinstance(light_or_name, str):
@@ -120,7 +130,9 @@ class LightOutputTask(Task):
             else:
                 light = light_or_name
 
-            return light.state.copy()
+            out = light.state.copy()
+            out.update(self._render_state_queue(light=light.name))
+            return out
         except (ValueError, RuntimeError) as e:
             if suppress_errors:
                 logger.error("Can't get state for %s: %s: %s", light_or_name, e.__class__.__name__, str(e))
@@ -168,7 +180,7 @@ class LightOutputTask(Task):
                 data['duration'],
                 speed_config=speed_config,
                 keep_state=data.get('keep_state', False),
-                orig_speed=light.state.get('speed') if speed_config else None,
+                orig_speed=light.initialize.get('speed') if speed_config else None,
             )
             self.effects[eff.id] = eff
             return eff
@@ -224,9 +236,8 @@ class LightOutputTask(Task):
                 if eff.done:
                     self.cancel_effect(effect=eff)
 
-        for light_name, state in self.state_queue:
+        for light_name, state in self._render_state_queue(clear=True).items():
             self.lights[light_name].set_state(**state)
-        self.state_queue = []
 
         #         elif cmd == 'exclusive':
         #             if not ev.sender:

@@ -11,20 +11,18 @@ back_1:
   StateEffects:
     IdleFadeout:
       when: audio['idle_for'] and audio['idle_for'] > 0.25
-      keep_state: true
       effects:
         dim: {end_value: 0, duration: 0.5}
 
     IdleCoast:
       when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
-      keep_state: true
+      reset: []
       effects:
         pan: {end_value: random, duration: 5}
         tilt: {end_value: random, duration: 5}
 
     DeadCoast:
       when: audio['dead_for'] and audio['dead_for'] > 2
-      keep_state: true
       reset: ['dim']
       effects:
         dim: {end_value: 20, duration: 1}
@@ -73,7 +71,6 @@ front_1:
   StateEffects:
     IdleFadeout:
       when: audio['idle_for'] and audio['idle_for'] > 0.25
-      keep_state: true
       effects:
         red: {end_value: 0, duration: 0.5}
         green: {end_value: 0, duration: 0.5}
@@ -84,14 +81,13 @@ front_1:
 
     IdleCoast:
       when: audio['audio_v_sum'] and time.time() - max(prop_last_update.get('pan', 0), prop_last_update.get('tilt', 0)) >= 2
-      keep_state: true
+      reset: []
       effects:
         pan: {end_value: random, duration: 5}
         tilt: {end_value: random, duration: 5}
 
     DeadCoast:
       when: audio['dead_for'] and audio['dead_for'] > 2
-      keep_state: true
       reset: ['dim']
       effects:
         dim: {end_value: 20, duration: 1}
